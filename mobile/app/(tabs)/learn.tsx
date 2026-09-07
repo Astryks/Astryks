@@ -9,6 +9,7 @@ import { db, functions } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { colors } from "@/lib/styles";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
+import SubscriptionDisclosure from "@/components/SubscriptionDisclosure";
 import { purchaseSubscription, waitForActiveSubscription, PlanId } from "@/lib/purchases";
 import { detectCountryCode, getLocalizedPricing, PRICE_CURRENCY_NOTE } from "@/lib/geo";
 import { fallbackDisplayPricing, resolveDisplayPricing, DisplayPricing } from "@/lib/pricing";
@@ -512,6 +513,7 @@ export default function LearnScreen() {
             {!pricing.isExact && (
               <Text style={{ fontSize: 11, color: colors.muted, textAlign: "center", marginBottom: 10 }}>{PRICE_CURRENCY_NOTE}</Text>
             )}
+            <SubscriptionDisclosure style={{ textAlign: "center", marginBottom: 10 }} />
             <TouchableOpacity onPress={() => setPreviewExhaustedSubject(null)}>
               <Text style={{ fontSize: 14, color: colors.muted, textDecorationLine: "underline" }}>Maybe later</Text>
             </TouchableOpacity>

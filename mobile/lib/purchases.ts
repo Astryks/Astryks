@@ -5,7 +5,13 @@ import Qonversion, {
   Product,
 } from "@qonversion/react-native-sdk";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase";
+
+// Server-side counterpart to this file — asks Qonversion's own servers for this user's real
+// entitlement state and writes users/{uid}.subscriptionStatus itself. See its comment in
+// astryks-app/functions/index.js for why this exists alongside (not instead of) the webhook.
+const verifyPurchaseFn = httpsCallable(functions, "verifyPurchase");
 
 // --- Qonversion setup ----------------------------------------------------
 //
@@ -163,26 +169,39 @@ export async function purchaseSubscription(planId: PlanId): Promise<{ success: b
 export async function restorePurchases(): Promise<boolean> {
   try {
     const entitlements = await Qonversion.getSharedInstance().restore();
-    return !!entitlements?.get(ENTITLEMENT_ID)?.isActive;
+    const active = !!entitlements?.get(ENTITLEMENT_ID)?.isActive;
+    if (active) {
+      // Sync users/{uid}.subscriptionStatus immediately rather than waiting on the webhook —
+      // see waitForActiveSubscription below for why that matters.
+      verifyPurchaseFn().catch(() => {});
+    }
+    return active;
   } catch {
     return false;
   }
 }
 
 // The store confirms a purchase instantly, but getLessonPlayback and every other
-// subscriber-gated action actually check users/{uid}.subscriptionStatus in Firestore, which only
-// the qonversionWebhook (server-side) is allowed to write — the client can't set it directly (see
-// firestore.rules). That webhook can land a few seconds after the purchase sheet closes, so
-// declaring a purchase "done" the moment the store confirms it can let a caller try a
-// subscriber-only action before the server would actually allow it. Poll briefly for the real
-// server-side entitlement instead — shared here so every purchase-confirmation UI (the paywall
-// modal, the subscription banner, the billing screen) waits the same way rather than each
-// hand-rolling its own copy of this loop.
+// subscriber-gated action actually check users/{uid}.subscriptionStatus in Firestore. That field
+// is meant to be kept in sync by the qonversionWebhook Cloud Function, but a webhook depends on
+// it being correctly configured in the Qonversion dashboard — if it's ever missing or briefly
+// broken, the field would otherwise never update and a paying subscriber would stay capped at
+// the free preview forever. So each attempt here first calls the verifyPurchase callable, which
+// asks Qonversion's servers directly and writes subscriptionStatus itself, then falls back to
+// just re-reading Firestore (in case the webhook got there first). Shared here so every
+// purchase-confirmation UI (the paywall modal, the subscription banner, the billing screen)
+// waits the same way rather than each hand-rolling its own copy of this loop.
 export async function waitForActiveSubscription(
   uid: string,
-  { attempts = 10, delayMs = 1500 }: { attempts?: number; delayMs?: number } = {}
+  { attempts = 8, delayMs = 1500 }: { attempts?: number; delayMs?: number } = {}
 ): Promise<boolean> {
   for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const result = await verifyPurchaseFn();
+      if ((result.data as { active?: boolean } | undefined)?.active) return true;
+    } catch {
+      // Fall through to the Firestore check below for this attempt.
+    }
     const snap = await getDoc(doc(db, "users", uid));
     if (snap.data()?.subscriptionStatus === "active") return true;
     await new Promise((resolve) => setTimeout(resolve, delayMs));

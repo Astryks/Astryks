@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, Platform } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import TrailersSection from "@/components/TrailersSection";
+import SubscriptionDisclosure from "@/components/SubscriptionDisclosure";
 import { colors } from "@/lib/styles";
 import { detectCountryCode, getLocalizedPricing, PRICE_CURRENCY_NOTE } from "@/lib/geo";
 import { purchaseSubscription, waitForActiveSubscription, PlanId } from "@/lib/purchases";
@@ -112,9 +113,7 @@ export default function SubscriptionBanner() {
       {error && (
         <Text style={{ fontSize: 14, color: "#B3261E", marginTop: 8 }}>{error}</Text>
       )}
-      <Text style={{ fontSize: 14, color: colors.muted, marginTop: 8 }}>
-        Billed through your {Platform.OS === "ios" ? "Apple ID" : "Google Play"} account · cancel anytime
-      </Text>
+      <SubscriptionDisclosure style={{ marginTop: 8 }} />
     </View>
   );
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Linking } from "react-native";
 import { Link, router } from "expo-router";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile, linkWithCredential, EmailAuthProvider } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { styles, colors } from "@/lib/styles";
@@ -14,6 +14,12 @@ export default function SignupScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // A guest ("Continue without an account" on the login screen) already has an anonymous
+  // Firebase user by the time they reach this screen — linking a real email/password credential
+  // onto that same uid keeps their posts, progress, and any subscription they already bought,
+  // instead of creating a brand-new empty account alongside the guest one.
+  const isSavingGuestAccount = !!auth.currentUser?.isAnonymous;
+
   async function handleSignup() {
     if (!agreed) {
       setError("Please agree to the Terms of Service and Privacy Policy to continue.");
@@ -22,19 +28,18 @@ export default function SignupScreen() {
     setError(null);
     setLoading(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(cred.user, { displayName: name });
-      await setDoc(doc(db, "profiles", cred.user.uid), {
-        displayName: name,
-        createdAt: serverTimestamp(),
-      });
-      // AuthContext's own onAuthStateChanged listener fires the instant createUserWithEmailAndPassword
+      const uid = isSavingGuestAccount && auth.currentUser
+        ? (await linkWithCredential(auth.currentUser, EmailAuthProvider.credential(email, password))).user.uid
+        : (await createUserWithEmailAndPassword(auth, email, password)).user.uid;
+      await updateProfile(auth.currentUser!, { displayName: name });
+      await setDoc(doc(db, "profiles", uid), { displayName: name, createdAt: serverTimestamp() }, { merge: true });
+      // AuthContext's own onAuthStateChanged listener fires the instant the credential above
       // resolves, with the auth user's displayName still null at that point (updateProfile above
       // hasn't landed yet) — so without this, it writes users/{uid}.displayName as the fallback
       // "Member" and that's what shows up in search/profile pages until the next full login,
       // since profile edits don't re-fire onAuthStateChanged. Set the real name here too so it's
       // correct immediately.
-      await setDoc(doc(db, "users", cred.user.uid), { displayName: name }, { merge: true });
+      await setDoc(doc(db, "users", uid), { displayName: name }, { merge: true });
       router.replace("/(tabs)/home");
     } catch (err: any) {
       setError(err.message);
@@ -48,7 +53,13 @@ export default function SignupScreen() {
       style={styles.centered}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={styles.title}>Create your account</Text>
+      <Text style={styles.title}>{isSavingGuestAccount ? "Save your account" : "Create your account"}</Text>
+      {isSavingGuestAccount && (
+        <Text style={{ fontSize: 15, color: colors.muted, marginBottom: 12, marginTop: -8 }}>
+          Add an email and password so your posts and subscription aren&apos;t lost if you switch
+          devices or reinstall the app.
+        </Text>
+      )}
 
       <TextInput style={styles.input} placeholder="Full name" value={name} onChangeText={setName} />
       <TextInput
@@ -102,7 +113,9 @@ export default function SignupScreen() {
       {error && <Text style={styles.error}>{error}</Text>}
 
       <TouchableOpacity style={styles.buttonPrimary} onPress={handleSignup} disabled={loading}>
-        <Text style={styles.buttonPrimaryText}>{loading ? "Creating account…" : "Sign up"}</Text>
+        <Text style={styles.buttonPrimaryText}>
+          {loading ? "Saving…" : isSavingGuestAccount ? "Save account" : "Sign up"}
+        </Text>
       </TouchableOpacity>
 
       <Link href="/login" style={styles.link}>

@@ -4250,6 +4250,12 @@ const stripeAnnualPriceId = defineSecret("STRIPE_ANNUAL_PRICE_ID");
 // Basic auth normally is, it's just their chosen header format for a plain shared secret.
 const qonversionWebhookAuth = defineSecret("QONVERSION_WEBHOOK_AUTH");
 
+// Server-to-server Secret Key from the Qonversion dashboard (Project Settings > API Keys —
+// NOT the public Project Key already embedded in astryks-mobile/lib/purchases.ts). Lets
+// verifyPurchase below ask Qonversion's own servers for a user's entitlement state directly,
+// instead of relying solely on qonversionWebhook ever being invoked.
+const qonversionSecretKey = defineSecret("QONVERSION_SECRET_KEY");
+
 // Only ever send Stripe redirects back to Astryks's own domain — without this, a caller could
 // pass any successUrl/cancelUrl/returnUrl they like and turn our own Checkout/Billing Portal
 // session into an open redirect to an attacker-controlled site (phishing, credential capture,
@@ -5252,6 +5258,61 @@ exports.qonversionWebhook = onRequest({ secrets: [qonversionWebhookAuth] }, asyn
     console.error("qonversionWebhook error:", err);
     res.status(500).send("Internal error");
   }
+});
+
+// Pull-based counterpart to qonversionWebhook above, called directly by the client right after
+// a purchase/restore completes (see astryks-mobile/lib/purchases.ts's waitForActiveSubscription).
+// Unlike the webhook, this doesn't depend on Qonversion's dashboard having a working webhook URL
+// configured at all — it asks Qonversion's servers for this user's entitlement state directly,
+// using the Qonversion user ID, which is always the Firebase uid because
+// astryks-mobile/lib/purchases.ts's initPurchases() calls identify(uid) on every sign-in.
+exports.verifyPurchase = onCall({ secrets: [qonversionSecretKey] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "You must be logged in.");
+  }
+
+  const secretKey = qonversionSecretKey.value();
+  if (!secretKey) {
+    // QONVERSION_SECRET_KEY hasn't been set yet — nothing to verify against. The caller's
+    // polling loop will keep retrying and eventually fall back to whatever qonversionWebhook
+    // may have written instead.
+    return { active: false };
+  }
+
+  const uid = request.auth.uid;
+  const ENTITLEMENT_ID = "premium"; // must match astryks-mobile/lib/purchases.ts
+
+  let resp;
+  try {
+    resp = await fetch(`https://api.qonversion.io/v4/users/${encodeURIComponent(uid)}/entitlements`, {
+      headers: { Authorization: `Bearer ${secretKey}` },
+    });
+  } catch (err) {
+    console.error("verifyPurchase: request to Qonversion failed:", err);
+    throw new HttpsError("unavailable", "Could not reach the purchase verification service.");
+  }
+
+  if (!resp.ok) {
+    // A brand-new Qonversion user (this device's very first purchase) can 404 for a moment
+    // before Qonversion has finished ingesting the store receipt — treat that as "not active
+    // yet" so the client just retries, rather than surfacing a scary error mid-purchase.
+    if (resp.status === 404) return { active: false };
+    console.error("verifyPurchase: Qonversion API error:", resp.status, await resp.text().catch(() => ""));
+    throw new HttpsError("unavailable", "Could not reach the purchase verification service.");
+  }
+
+  const body = await resp.json();
+  const premium = (body.data || []).find((e) => e && e.id === ENTITLEMENT_ID);
+  const active = !!premium?.is_active;
+
+  await db.doc(`users/${uid}`).set(
+    active
+      ? { subscriptionStatus: "active", subscriptionPlatform: premium.source || "qonversion" }
+      : { subscriptionStatus: "canceled", canceledAt: admin.firestore.FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+
+  return { active };
 });
 
 // ---------- Scheduled: mark $50 referral payouts owed after 3 months of active subscription ----------

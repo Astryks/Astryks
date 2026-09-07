@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, ScrollView, Platform, Image, Linking } from "react-native";
 import { Link, router } from "expo-router";
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { signInWithEmailAndPassword, sendPasswordResetEmail, signInAnonymously } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { styles, colors } from "@/lib/styles";
 import BrandMark from "@/components/BrandMark";
@@ -64,6 +64,7 @@ export default function LoginScreen() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [guestLoading, setGuestLoading] = useState(false);
   // Illustrative only — see lib/geo.ts. The App Store/Play Store determine the actual charge.
   const [pricing, setPricing] = useState(() => getLocalizedPricing(null));
 
@@ -89,6 +90,19 @@ export default function LoginScreen() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleContinueAsGuest() {
+    setError(null);
+    setGuestLoading(true);
+    try {
+      await signInAnonymously(auth);
+      router.replace("/(tabs)/home");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setGuestLoading(false);
     }
   }
 
@@ -207,6 +221,12 @@ export default function LoginScreen() {
       <Link href="/signup" style={styles.link}>
         Don&apos;t have an account? Sign up
       </Link>
+
+      <TouchableOpacity onPress={handleContinueAsGuest} disabled={guestLoading} style={{ marginTop: 4 }}>
+        <Text style={{ color: colors.muted, fontSize: 16, textAlign: "center", textDecorationLine: "underline" }}>
+          {guestLoading ? "Just a sec…" : "Continue without an account"}
+        </Text>
+      </TouchableOpacity>
 
       <View style={{ height: 1, backgroundColor: colors.line + "1A", marginVertical: 32 }} />
 

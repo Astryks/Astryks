@@ -4,6 +4,7 @@ import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { colors } from "@/lib/styles";
+import SubscriptionDisclosure from "@/components/SubscriptionDisclosure";
 import { detectCountryCode, getLocalizedPricing, PRICE_CURRENCY_NOTE } from "@/lib/geo";
 import { purchaseSubscription, restorePurchases, waitForActiveSubscription, PlanId } from "@/lib/purchases";
 import { fallbackDisplayPricing, resolveDisplayPricing, DisplayPricing } from "@/lib/pricing";
@@ -141,6 +142,7 @@ export default function ReferralAndBilling() {
         {status !== "active" && !pricing.isExact && (
           <Text style={{ fontSize: 11, color: colors.muted, marginTop: 8 }}>{PRICE_CURRENCY_NOTE}</Text>
         )}
+        {status !== "active" && <SubscriptionDisclosure style={{ marginTop: 8 }} />}
         {confirming && (
           <Text style={{ fontSize: 14, color: colors.muted, marginTop: 8 }}>Confirming your subscription…</Text>
         )}

@@ -392,6 +392,20 @@ export default function MeScreen() {
         </View>
         <TouchableOpacity
           onPress={() => {
+            if (user.isAnonymous) {
+              // A guest session has no email/password to sign back in with — signing out here
+              // would permanently strand their posts and any subscription on an account they can
+              // never reach again, since Firebase has no way to "log back into" an anonymous uid.
+              Alert.alert(
+                "Save your account first",
+                "You're browsing as a guest. Logging out now will permanently lose your posts and subscription — save your account with an email and password first.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Save account", onPress: () => router.push("/signup") },
+                ]
+              );
+              return;
+            }
             // Fire-and-forget, and called before signOut() while the auth token is still valid —
             // notifySignOut needs request.auth, which is gone the instant signOut() completes.
             notifySignOut().catch(() => {});
@@ -401,6 +415,22 @@ export default function MeScreen() {
           <Text style={{ color: colors.muted, fontSize: 17 }}>Log out</Text>
         </TouchableOpacity>
       </View>
+
+      {user.isAnonymous && (
+        <TouchableOpacity
+          onPress={() => router.push("/signup")}
+          style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.sectionLavender, borderRadius: 12, padding: 14, marginBottom: 16 }}
+        >
+          <Text style={{ fontSize: 20 }}>💾</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 16, fontWeight: "600" }}>Save your account</Text>
+            <Text style={{ fontSize: 14, color: colors.muted, lineHeight: 15 }}>
+              Add an email &amp; password so you don&apos;t lose your posts or subscription
+            </Text>
+          </View>
+          <Text style={{ color: colors.muted, fontSize: 18 }}>›</Text>
+        </TouchableOpacity>
+      )}
 
       {lessons.length > 0 && (
         <View style={{ borderWidth: 1, borderColor: colors.line + "1A", borderRadius: 12, padding: 14, marginBottom: 16 }}>
