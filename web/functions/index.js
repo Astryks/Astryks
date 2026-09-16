@@ -146,15 +146,10 @@ async function updatePlatformSubscriptionStatus(uid, platform, isActive, extraFi
 
 const BUNNY_API_KEY = defineSecret("BUNNY_API_KEY");
 const BUNNY_LIBRARY_ID = defineSecret("BUNNY_LIBRARY_ID");
-// TODO(sid): once BUNNY_STREAM_TOKEN_KEY actually exists in Secret Manager
-// (`firebase functions:secrets:set BUNNY_STREAM_TOKEN_KEY --project astryks-5f31c`, value from
-// Bunny Stream's Security tab — Stream > Library > Security > Token Authentication Key, after
-// turning Token Authentication on for the lessons library there), uncomment the line below AND
-// see getLessonPlayback further down for the matching signing code to restore. Left out entirely
-// for now — the Firebase CLI's deploy-time check requires a secret to already exist the moment
-// defineSecret() is called anywhere in this file, even completely unused, which would otherwise
-// block deploying every other fix in this same release.
-// const BUNNY_STREAM_TOKEN_KEY = defineSecret("BUNNY_STREAM_TOKEN_KEY");
+// Separate from BUNNY_API_KEY above — this is the per-library "Token Authentication Key" from
+// Bunny Stream's Security tab (Stream > Library > Security), used only to sign short-lived
+// playback tokens for getLessonPlayback below.
+const BUNNY_STREAM_TOKEN_KEY = defineSecret("BUNNY_STREAM_TOKEN_KEY");
 // Declared here (rather than down by the other Stripe secrets, where it originally lived)
 // because deleteUserAccount/deleteMyAccount reference it in their onCall({ secrets: [...] })
 // config objects, which run immediately at module load — declaring it later as a `const` meant
@@ -948,13 +943,7 @@ const FREE_PREVIEW_SECONDS_ALLOWED = 10 * 60;
 // Callable: the ONLY legitimate way to get a lesson's actual playback credentials now — gated
 // on an active subscription, the free preview allowance for that lesson's subject, or admin,
 // unlike reading them straight off the public lessons doc.
-// TODO(sid): add `{ secrets: [BUNNY_STREAM_TOKEN_KEY] }` back here once that secret is actually
-// set (`firebase functions:secrets:set BUNNY_STREAM_TOKEN_KEY --project astryks-5f31c`) — a
-// Cloud Functions v2 secret has to exist before ANY function can deploy with it in its `secrets`
-// list, so it's left off this deploy to avoid blocking every other fix in this same release.
-// BUNNY_STREAM_TOKEN_KEY.value() below just reads as empty until then, which the `if (tokenKey)`
-// check already handles by falling back to the pre-existing unsigned behavior.
-exports.getLessonPlayback = onCall(async (request) => {
+exports.getLessonPlayback = onCall({ secrets: [BUNNY_STREAM_TOKEN_KEY] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "You must be logged in.");
   }
@@ -1011,12 +1000,7 @@ exports.getLessonPlayback = onCall(async (request) => {
   // the Bunny dashboard and BUNNY_STREAM_TOKEN_KEY is set — see its definition above.
   let bunnyToken = null;
   let bunnyTokenExpires = null;
-  // TODO(sid): switch back to `BUNNY_STREAM_TOKEN_KEY.value()` once that secret is set — the
-  // Firebase CLI's deploy-time analysis treats ANY `.value()` call on a secret param as requiring
-  // that secret to already exist for the function it appears in (regardless of whether it's also
-  // listed in that function's `{ secrets: [...] }` option), so leaving the call in here at all
-  // blocks deploying every other fix in this same release until BUNNY_STREAM_TOKEN_KEY exists.
-  const tokenKey = null;
+  const tokenKey = BUNNY_STREAM_TOKEN_KEY.value();
   if (tokenKey) {
     const ttlSeconds = freePreviewSecondsRemaining === null
       ? 3 * 60 * 60 // subscriber/admin: flat 3-hour window, no allowance to bound it by
