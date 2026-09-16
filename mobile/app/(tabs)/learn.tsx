@@ -17,6 +17,15 @@ import { fallbackDisplayPricing, resolveDisplayPricing, DisplayPricing } from "@
 const completeLessonFn = httpsCallable(functions, "completeLesson");
 const getLessonPlaybackFn = httpsCallable(functions, "getLessonPlayback");
 const reportPreviewProgressFn = httpsCallable(functions, "reportPreviewProgress");
+
+// Appends the short-lived signed token from getLessonPlayback when one was issued (see its
+// comment in functions/index.js) — falls back to the bare embed URL if Bunny Token
+// Authentication isn't configured yet, same as before this fix.
+function bunnyEmbedUrl(p: { bunnyLibraryId: string; bunnyVideoId: string; bunnyToken?: string | null; bunnyTokenExpires?: number | null }): string {
+  const base = `https://iframe.mediadelivery.net/embed/${p.bunnyLibraryId}/${p.bunnyVideoId}`;
+  if (!p.bunnyToken || !p.bunnyTokenExpires) return base;
+  return `${base}?token=${p.bunnyToken}&expires=${p.bunnyTokenExpires}`;
+}
 const ICONS: Record<string, string> = { music: "🎵", art: "🎨" };
 const THUMBNAILS: Record<string, any> = {
   music: require("@/assets/music-preview.jpg"),
@@ -60,7 +69,7 @@ export default function LearnScreen() {
   const [lessons, setLessons] = useState<any[]>([]);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [playback, setPlayback] = useState<Record<string, { bunnyVideoId: string; bunnyLibraryId: string; subjectId: string | null; freePreviewSecondsRemaining: number | null } | null>>({});
+  const [playback, setPlayback] = useState<Record<string, { bunnyVideoId: string; bunnyLibraryId: string; bunnyToken: string | null; bunnyTokenExpires: number | null; subjectId: string | null; freePreviewSecondsRemaining: number | null } | null>>({});
   const [playbackLoading, setPlaybackLoading] = useState<string | null>(null);
   const [playbackError, setPlaybackError] = useState<Record<string, string | null>>({});
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
@@ -188,6 +197,8 @@ export default function LearnScreen() {
         const data = result.data as {
           bunnyVideoId: string;
           bunnyLibraryId: string;
+          bunnyToken: string | null;
+          bunnyTokenExpires: number | null;
           subjectId: string | null;
           freePreviewSecondsRemaining: number | null;
         };
@@ -442,7 +453,7 @@ export default function LearnScreen() {
                 )}
                 {playingId === lesson.id && playback[lesson.id]?.bunnyVideoId && (
                   <WebView
-                    source={{ uri: `https://iframe.mediadelivery.net/embed/${playback[lesson.id]!.bunnyLibraryId}/${playback[lesson.id]!.bunnyVideoId}` }}
+                    source={{ uri: bunnyEmbedUrl(playback[lesson.id]!) }}
                     style={{ width: "100%", height: 200, borderRadius: 12, marginTop: 10 }}
                   />
                 )}

@@ -109,8 +109,52 @@ async function enforceRateLimit(uid, action, { max, windowMs }) {
   }
 }
 
+// Merges a per-platform subscription update onto users/{uid}, deriving the overall
+// subscriptionStatus (the one field every paywall check, referral payout, and admin display
+// actually reads) as active if EITHER platform currently reports active — never letting one
+// platform's webhook blindly cancel a subscription the OTHER platform granted. Previously,
+// stripeWebhook wrote subscriptionStatus straight from Stripe's own view, and separately
+// qonversionWebhook/verifyPurchase wrote it straight from Qonversion's view, each with no idea
+// the other platform even existed. That meant polling for a mobile IAP entitlement that was never
+// purchased (e.g. right after installing the app while already a paying web subscriber) could
+// silently overwrite subscriptionStatus to "canceled" and lock out a still-valid Stripe
+// subscriber — and, symmetrically, a Stripe cancellation could have clobbered a real IAP one.
+// `platform` is "stripe" or "iap"; `extraFieldsFn`, if given, is called with the user doc's
+// current data and its return value is merged in alongside the status fields (used so a caller
+// that also needs to read the current doc, e.g. to avoid resetting subscriptionStartDate on a
+// resubscribe, only needs the one read this function already does).
+async function updatePlatformSubscriptionStatus(uid, platform, isActive, extraFieldsFn) {
+  const userRef = db.doc(`users/${uid}`);
+  const snap = await userRef.get();
+  const data = snap.data() || {};
+  const otherPlatform = platform === "stripe" ? "iap" : "stripe";
+  const otherActive = data[`${otherPlatform}SubscriptionStatus`] === "active";
+  const wasOverallActive = data.subscriptionStatus === "active";
+  const overallActive = isActive || otherActive;
+
+  const update = {
+    [`${platform}SubscriptionStatus`]: isActive ? "active" : "canceled",
+    subscriptionStatus: overallActive ? "active" : "canceled",
+    ...(extraFieldsFn ? extraFieldsFn(data) : {}),
+  };
+  if (wasOverallActive && !overallActive) {
+    update.canceledAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+  await userRef.set(update, { merge: true });
+  return { overallActive, wasOverallActive };
+}
+
 const BUNNY_API_KEY = defineSecret("BUNNY_API_KEY");
 const BUNNY_LIBRARY_ID = defineSecret("BUNNY_LIBRARY_ID");
+// TODO(sid): once BUNNY_STREAM_TOKEN_KEY actually exists in Secret Manager
+// (`firebase functions:secrets:set BUNNY_STREAM_TOKEN_KEY --project astryks-5f31c`, value from
+// Bunny Stream's Security tab — Stream > Library > Security > Token Authentication Key, after
+// turning Token Authentication on for the lessons library there), uncomment the line below AND
+// see getLessonPlayback further down for the matching signing code to restore. Left out entirely
+// for now — the Firebase CLI's deploy-time check requires a secret to already exist the moment
+// defineSecret() is called anywhere in this file, even completely unused, which would otherwise
+// block deploying every other fix in this same release.
+// const BUNNY_STREAM_TOKEN_KEY = defineSecret("BUNNY_STREAM_TOKEN_KEY");
 // Declared here (rather than down by the other Stripe secrets, where it originally lived)
 // because deleteUserAccount/deleteMyAccount reference it in their onCall({ secrets: [...] })
 // config objects, which run immediately at module load — declaring it later as a `const` meant
@@ -402,6 +446,29 @@ exports.createBunnyUpload = onCall(
 // it — without this, fetchLinkPreview is a server-side-request-forgery primitive: any signed-in
 // user could point it at http://169.254.169.254/... (cloud metadata endpoints), localhost, or an
 // internal-network address and have Astryks's own backend make that request for them.
+// Pulls an embedded IPv4 address out of an IPv6 literal, covering the forms a DNS lookup or a
+// crafted URL can actually hand us: standard IPv4-mapped (::ffff:127.0.0.1), the same thing in
+// pure hex-group form (::ffff:7f00:1 — no dots, so the plain regex below would otherwise miss
+// it), NAT64 (64:ff9b::a.b.c.d), and 6to4 (2002:aabb:ccdd:: encodes a.b.c.d in the next 32 bits).
+// Returns null if `h` isn't one of these, so the caller falls through to the plain IPv6 checks.
+function extractEmbeddedIPv4(h) {
+  let m = h.match(/(?:^::ffff:|^64:ff9b::)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (m) return m[1];
+  m = h.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (m) {
+    const hi = parseInt(m[1], 16);
+    const lo = parseInt(m[2], 16);
+    return [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff].join(".");
+  }
+  m = h.match(/^2002:([0-9a-f]{1,4}):([0-9a-f]{1,4}):/);
+  if (m) {
+    const hi = parseInt(m[1], 16);
+    const lo = parseInt(m[2], 16);
+    return [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff].join(".");
+  }
+  return null;
+}
+
 function isPrivateOrLoopbackHostname(hostname) {
   const h = hostname.toLowerCase();
   if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".internal") || h.endsWith(".local")) {
@@ -418,8 +485,16 @@ function isPrivateOrLoopbackHostname(hostname) {
     if (a === 192 && b === 168) return true; // 192.168.0.0/16
     if (a === 0) return true; // 0.0.0.0/8
   }
-  // IPv6 loopback/link-local/unique-local literals.
-  if (h === "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) return true;
+  // IPv4-mapped/NAT64/6to4 IPv6 literals — recurse on the embedded IPv4 address so it goes
+  // through the exact same private-range checks above instead of being missed entirely (a bare
+  // string check like `h === "::1"` never matches "::ffff:127.0.0.1", which resolves to the same
+  // loopback address at the socket layer).
+  const embedded = h.includes(":") ? extractEmbeddedIPv4(h) : null;
+  if (embedded) return isPrivateOrLoopbackHostname(embedded);
+  // IPv6 loopback/unspecified/link-local/unique-local literals.
+  if (h === "::1" || h === "::" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) {
+    return true;
+  }
   return false;
 }
 
@@ -644,6 +719,20 @@ exports.completeLesson = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "lessonId is required.");
   }
 
+  // Previously this awarded XP/streak/mastered-subject credit for ANY lessonId a signed-in
+  // account named, with no check that they were ever actually granted (let alone watched) that
+  // lesson — no subscription or free-preview eligibility check, no proof of engagement at all.
+  // Requiring a getLessonPlayback grant to exist first closes that: reaching this point already
+  // implies the subscription/free-preview gate in getLessonPlayback was satisfied at some point,
+  // and the short cooldown below is a cheap floor against a script that grants-then-immediately-
+  // completes in a tight loop — a real viewer takes meaningfully longer than that to watch
+  // anything.
+  const grantSnap = await db.doc(`lessonPlaybackGrants/${uid}_${lessonId}`).get();
+  const grantedAt = grantSnap.data()?.grantedAt?.toDate?.();
+  if (!grantedAt || Date.now() - grantedAt.getTime() < 10 * 1000) {
+    throw new HttpsError("failed-precondition", "Watch the lesson before marking it complete.");
+  }
+
   const lessonSnap = await db.doc(`lessons/${lessonId}`).get();
   const subjectId = lessonSnap.exists ? lessonSnap.data().subjectId : null;
 
@@ -859,10 +948,23 @@ const FREE_PREVIEW_SECONDS_ALLOWED = 10 * 60;
 // Callable: the ONLY legitimate way to get a lesson's actual playback credentials now — gated
 // on an active subscription, the free preview allowance for that lesson's subject, or admin,
 // unlike reading them straight off the public lessons doc.
+// TODO(sid): add `{ secrets: [BUNNY_STREAM_TOKEN_KEY] }` back here once that secret is actually
+// set (`firebase functions:secrets:set BUNNY_STREAM_TOKEN_KEY --project astryks-5f31c`) — a
+// Cloud Functions v2 secret has to exist before ANY function can deploy with it in its `secrets`
+// list, so it's left off this deploy to avoid blocking every other fix in this same release.
+// BUNNY_STREAM_TOKEN_KEY.value() below just reads as empty until then, which the `if (tokenKey)`
+// check already handles by falling back to the pre-existing unsigned behavior.
 exports.getLessonPlayback = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "You must be logged in.");
   }
+
+  // Handing out a working Bunny embed credential is the whole point of this function, so — same
+  // as fetchLinkPreview — cap how often one account can mint fresh ones. Without this, a modified
+  // client could defeat even a short-lived signed token below by simply re-calling this in a tight
+  // loop to keep minting new ones instead of ever running out.
+  await enforceRateLimit(request.auth.uid, "getLessonPlayback", { max: 30, windowMs: 10 * 60 * 1000 });
+
   const lessonId = request.data?.lessonId;
   if (!lessonId) {
     throw new HttpsError("invalid-argument", "lessonId is required.");
@@ -897,9 +999,48 @@ exports.getLessonPlayback = onCall(async (request) => {
   if (!data?.bunnyVideoId) {
     throw new HttpsError("not-found", "This lesson doesn't have a video yet.");
   }
+
+  // Sign a short-lived Bunny embed token instead of handing out the bare video/library IDs —
+  // those never expire on their own, so a modified client could fetch them once (while preview
+  // time remains) and keep replaying the exact same embed URL forever without ever calling
+  // reportPreviewProgress again. Tying a free-preview viewer's token expiry to however much of
+  // their allowance is actually left means the credential itself stops working once that time is
+  // up, regardless of whether the client ever reported its progress honestly. Subscribers/admins
+  // get a longer, flat TTL since there's no allowance to bound it by. Falls back to no token
+  // (current unsigned behavior) until Token Authentication is enabled for the lessons library in
+  // the Bunny dashboard and BUNNY_STREAM_TOKEN_KEY is set — see its definition above.
+  let bunnyToken = null;
+  let bunnyTokenExpires = null;
+  // TODO(sid): switch back to `BUNNY_STREAM_TOKEN_KEY.value()` once that secret is set — the
+  // Firebase CLI's deploy-time analysis treats ANY `.value()` call on a secret param as requiring
+  // that secret to already exist for the function it appears in (regardless of whether it's also
+  // listed in that function's `{ secrets: [...] }` option), so leaving the call in here at all
+  // blocks deploying every other fix in this same release until BUNNY_STREAM_TOKEN_KEY exists.
+  const tokenKey = null;
+  if (tokenKey) {
+    const ttlSeconds = freePreviewSecondsRemaining === null
+      ? 3 * 60 * 60 // subscriber/admin: flat 3-hour window, no allowance to bound it by
+      : Math.max(freePreviewSecondsRemaining + 60, 120); // free preview: bounded by what's left
+    bunnyTokenExpires = Math.floor(Date.now() / 1000) + ttlSeconds;
+    bunnyToken = crypto
+      .createHash("sha256")
+      .update(`${tokenKey}${data.bunnyVideoId}${bunnyTokenExpires}`)
+      .digest("hex");
+  }
+
+  // Recorded so completeLesson below can require proof that this account was actually granted
+  // (and, by extension, subscribed/within its free-preview allowance for) this specific lesson
+  // before it'll hand out XP/streak credit for it — see that function's comment.
+  await db.doc(`lessonPlaybackGrants/${request.auth.uid}_${lessonId}`).set(
+    { uid: request.auth.uid, lessonId, grantedAt: admin.firestore.FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+
   return {
     bunnyVideoId: data.bunnyVideoId,
     bunnyLibraryId: data.bunnyLibraryId,
+    bunnyToken,
+    bunnyTokenExpires,
     subjectId,
     // null for subscribers/admins (no cap to show); a number of seconds for everyone else.
     freePreviewSecondsRemaining,
@@ -4287,21 +4428,39 @@ function randomCode() {
 exports.getOrCreateReferralCode = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "You must be logged in.");
   const uid = request.auth.uid;
+  const userRef = db.doc(`users/${uid}`);
 
-  const userSnap = await db.doc(`users/${uid}`).get();
+  const userSnap = await userRef.get();
   const existing = userSnap.data()?.referralCode;
   if (existing) return { code: existing };
 
-  let code;
+  // Was a plain check-then-set with no transaction — two concurrent calls (e.g. a double-click,
+  // or two different people's random codes genuinely colliding) could both see the same code as
+  // unclaimed and both write it, and whichever write landed second would silently overwrite the
+  // referralCodes/{code} mapping to point at a different uid, while the FIRST caller's own
+  // users/{uid}.referralCode still showed that same code as theirs — so anyone who used "their"
+  // code from then on would actually be crediting the second person. tx.create() below fails
+  // atomically if the doc already exists by commit time, so a genuine collision just retries with
+  // a fresh random code instead of quietly stealing someone else's mapping.
   for (let attempt = 0; attempt < 5; attempt++) {
-    code = randomCode();
-    const taken = await db.doc(`referralCodes/${code}`).get();
-    if (!taken.exists) break;
+    const code = randomCode();
+    const codeRef = db.doc(`referralCodes/${code}`);
+    try {
+      await db.runTransaction(async (tx) => {
+        const codeSnap = await tx.get(codeRef);
+        if (codeSnap.exists) {
+          throw new Error("code-taken");
+        }
+        tx.create(codeRef, { uid });
+        tx.set(userRef, { referralCode: code }, { merge: true });
+      });
+      return { code };
+    } catch (err) {
+      if (err.message === "code-taken") continue;
+      throw err;
+    }
   }
-
-  await db.doc(`referralCodes/${code}`).set({ uid });
-  await db.doc(`users/${uid}`).set({ referralCode: code }, { merge: true });
-  return { code };
+  throw new HttpsError("resource-exhausted", "Couldn't generate a referral code — please try again.");
 });
 
 // ---------- Callable: check a referral code is real before applying it ----------
@@ -4361,6 +4520,12 @@ exports.createCheckoutSession = onCall(
         "You already have an active subscription — use Manage Subscription to change or cancel it."
       );
     }
+    // Reuse the same Stripe Customer object across a cancel-then-resubscribe cycle instead of
+    // creating a brand-new one every time — without this, someone who resubscribes a few times
+    // ends up with several duplicate Customer records in Stripe (fragmenting their payment
+    // history/invoices across all of them) for no reason, since Checkout defaults to always
+    // creating a new customer unless one is explicitly passed in.
+    const existingCustomerId = existingUserSnap.data()?.stripeCustomerId || null;
 
     const referralCode = (request.data?.referralCode || "").toUpperCase().trim() || null;
     const plan = request.data?.plan === "annual" ? "annual" : "weekly";
@@ -4393,6 +4558,7 @@ exports.createCheckoutSession = onCall(
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
+      ...(existingCustomerId ? { customer: existingCustomerId } : {}),
       line_items: [{ price: priceId, quantity: 1 }],
       client_reference_id: uid,
       metadata: { uid, referrerUid: referrerUid || "", plan },
@@ -5078,16 +5244,16 @@ exports.stripeWebhook = onRequest(
       const countryCode = session.customer_details?.address?.country || null;
       const subscriptionCurrency = session.currency ? session.currency.toUpperCase() : null;
 
-      await db.doc(`users/${uid}`).set(
-        {
-          subscriptionStatus: "active",
-          stripeCustomerId: session.customer,
-          subscriptionStartDate: admin.firestore.FieldValue.serverTimestamp(),
-          ...(countryCode ? { countryCode } : {}),
-          ...(subscriptionCurrency ? { subscriptionCurrency } : {}),
-        },
-        { merge: true }
-      );
+      await updatePlatformSubscriptionStatus(uid, "stripe", true, (existing) => ({
+        stripeCustomerId: session.customer,
+        // Only set once, on a genuinely first-ever subscribe — a later cancel-then-resubscribe
+        // (this same handler fires again for that too) must NOT reset it back to "now", since
+        // requestRefund's 90-day window and the referral payout check both measure from this
+        // date and are meant to track someone's actual first charge, not their most recent one.
+        ...(existing.subscriptionStartDate ? {} : { subscriptionStartDate: admin.firestore.FieldValue.serverTimestamp() }),
+        ...(countryCode ? { countryCode } : {}),
+        ...(subscriptionCurrency ? { subscriptionCurrency } : {}),
+      }));
 
       if (referrerUid) {
         await db.doc(`referrals/${uid}`).set({
@@ -5140,24 +5306,20 @@ exports.stripeWebhook = onRequest(
       const usersSnap = await db.collection("users").where("stripeCustomerId", "==", sub.customer).limit(1).get();
       if (!usersSnap.empty) {
         const userDoc = usersSnap.docs[0];
-        const wasActive = userDoc.data()?.subscriptionStatus === "active";
-        await userDoc.ref.set(
-          {
-            subscriptionStatus: isActive ? "active" : "canceled",
-            ...(isActive ? {} : { canceledAt: admin.firestore.FieldValue.serverTimestamp() }),
-          },
-          { merge: true }
-        );
+        const { overallActive, wasOverallActive } = await updatePlatformSubscriptionStatus(userDoc.id, "stripe", isActive);
 
-        // Only email the moment a subscription actually TRANSITIONS from active to canceled —
+        // Only email the moment the subscription actually TRANSITIONS from active to canceled —
         // Stripe fires "customer.subscription.updated" for lots of things unrelated to
         // cancellation (card updates, trial-to-paid, etc.), and firing this on every one of
         // those would spam someone who hasn't actually canceled anything. And never send the
         // "canceled, you won't be charged again" email for a past_due lapse specifically — that
         // state can still recover into a real charge, so a payment-failed email (surfaced to the
         // user in-app via their billing status, not yet a separate email template) is the
-        // accurate message here, not a cancellation confirmation.
-        if (wasActive && !isActive && !isPastDue) {
+        // accurate message here, not a cancellation confirmation. Checked against overallActive,
+        // not just this platform's isActive, so canceling the Stripe side of a dual Stripe+IAP
+        // subscriber (still active via mobile) doesn't send a "you're all canceled now" email
+        // that isn't true.
+        if (wasOverallActive && !overallActive && !isPastDue) {
           try {
             const userRecord = await admin.auth().getUser(userDoc.id);
             if (userRecord.email) {
@@ -5233,25 +5395,23 @@ exports.qonversionWebhook = onRequest({ secrets: [qonversionWebhookAuth] }, asyn
       return;
     }
 
-    if (premium.active) {
-      await db.doc(`users/${uid}`).set(
-        {
-          subscriptionStatus: "active",
-          subscriptionPlatform: event.platform ? event.platform.toLowerCase() : "qonversion",
-          ...(event.country ? { countryCode: event.country } : {}),
-        },
-        { merge: true }
-      );
-    } else {
-      // `active: false` already accounts for the "keep access until the paid period ends" grace
-      // period the same way RevenueCat's CANCELLATION-vs-EXPIRATION distinction did — Qonversion
-      // keeps `active: true` until the period actually lapses even after the user cancels
-      // auto-renew, so we don't need separate cancellation-vs-expiration handling here.
-      await db.doc(`users/${uid}`).set(
-        { subscriptionStatus: "canceled", canceledAt: admin.firestore.FieldValue.serverTimestamp() },
-        { merge: true }
-      );
-    }
+    // `active: false` already accounts for the "keep access until the paid period ends" grace
+    // period the same way RevenueCat's CANCELLATION-vs-EXPIRATION distinction did — Qonversion
+    // keeps `active: true` until the period actually lapses even after the user cancels
+    // auto-renew, so we don't need separate cancellation-vs-expiration handling here.
+    // updatePlatformSubscriptionStatus (not a plain write) is what keeps this from clobbering a
+    // still-active Stripe subscription on the same account — see its comment for why.
+    await updatePlatformSubscriptionStatus(
+      uid,
+      "iap",
+      !!premium.active,
+      premium.active
+        ? () => ({
+            subscriptionPlatform: event.platform ? event.platform.toLowerCase() : "qonversion",
+            ...(event.country ? { countryCode: event.country } : {}),
+          })
+        : undefined
+    );
 
     res.json({ received: true });
   } catch (err) {
@@ -5305,11 +5465,17 @@ exports.verifyPurchase = onCall({ secrets: [qonversionSecretKey] }, async (reque
   const premium = (body.data || []).find((e) => e && e.id === ENTITLEMENT_ID);
   const active = !!premium?.is_active;
 
-  await db.doc(`users/${uid}`).set(
-    active
-      ? { subscriptionStatus: "active", subscriptionPlatform: premium.source || "qonversion" }
-      : { subscriptionStatus: "canceled", canceledAt: admin.firestore.FieldValue.serverTimestamp() },
-    { merge: true }
+  // updatePlatformSubscriptionStatus (not a plain write) is what keeps this from clobbering a
+  // still-active Stripe subscription on the same account — see its comment for why. Without it,
+  // this exact call (fired right after every mobile purchase attempt, per
+  // astryks-mobile/lib/purchases.ts's waitForActiveSubscription) is precisely what could wipe a
+  // paying web subscriber's access the moment they open the app on mobile without ever buying an
+  // IAP subscription there.
+  await updatePlatformSubscriptionStatus(
+    uid,
+    "iap",
+    active,
+    active ? () => ({ subscriptionPlatform: premium.source || "qonversion" }) : undefined
   );
 
   return { active };

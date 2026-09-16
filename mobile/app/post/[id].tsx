@@ -15,6 +15,7 @@ import ShareMenu from "@/components/ShareMenu";
 import PersistentTabBar from "@/components/PersistentTabBar";
 import { colors } from "@/lib/styles";
 import { ADMIN_EMAILS } from "@/lib/admin";
+import { usePostMediaUrl } from "@/lib/resizedImage";
 
 const deletePostFn = httpsCallable(functions, "deletePost");
 
@@ -50,6 +51,15 @@ export default function PostDetailScreen() {
   // is just null until `post` has loaded.
   const isNativeVideo = post?.type === "video" && !post?.bunnyVideoId;
   const player = useVideoPlayer(isNativeVideo ? post.mediaUrl : null);
+  // See usePostMediaUrl's comment (lib/resizedImage.ts): fetches a fresh, rules-checked download
+  // URL from mediaPath instead of trusting the permanent public token stored in mediaUrl, so this
+  // deep-linkable screen can't keep serving a private or later-flagged post's photo forever just
+  // because a viewer's copy of the link still has it. Only used for photos below — the native
+  // video player above takes its source once at hook-call time (a legacy path anyway, per
+  // components/PostCard.tsx's migration note; new video posts are Bunny-hosted, not this). Called
+  // unconditionally (hooks can't be conditional) — mediaPath/mediaUrl are just undefined until
+  // `post` loads, or for non-photo posts, which the render below already ignores.
+  const photoUrl = usePostMediaUrl(post?.mediaPath, post?.mediaUrl ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,7 +180,7 @@ export default function PostDetailScreen() {
       {post.type === "video" && !post.bunnyVideoId && (
         <VideoView player={player} style={{ width: "100%", height: 240, borderRadius: 16 }} nativeControls contentFit="contain" />
       )}
-      {post.type === "photo" && <Image source={{ uri: post.mediaUrl }} style={{ width: "100%", height: 260, borderRadius: 16 }} />}
+      {post.type === "photo" && photoUrl && <Image source={{ uri: photoUrl }} style={{ width: "100%", height: 260, borderRadius: 16 }} />}
       {post.type === "text" && (
         <Text style={{ fontSize: 24, fontWeight: "700", color: colors.ink }}>{post.body}</Text>
       )}

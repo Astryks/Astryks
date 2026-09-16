@@ -15,6 +15,15 @@ const completeLessonFn = httpsCallable(functions, "completeLesson");
 const getLessonPlaybackFn = httpsCallable(functions, "getLessonPlayback");
 const reportPreviewProgressFn = httpsCallable(functions, "reportPreviewProgress");
 
+// Appends the short-lived signed token from getLessonPlayback when one was issued (see its
+// comment in functions/index.js) — falls back to the bare embed URL if Bunny Token
+// Authentication isn't configured yet, same as before this fix.
+function bunnyEmbedUrl(p: { bunnyLibraryId: string; bunnyVideoId: string; bunnyToken?: string | null; bunnyTokenExpires?: number | null }): string {
+  const base = `https://iframe.mediadelivery.net/embed/${p.bunnyLibraryId}/${p.bunnyVideoId}`;
+  if (!p.bunnyToken || !p.bunnyTokenExpires) return base;
+  return `${base}?token=${p.bunnyToken}&expires=${p.bunnyTokenExpires}`;
+}
+
 function formatMinutesSeconds(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
   const s = Math.max(0, totalSeconds % 60);
@@ -68,7 +77,7 @@ function LearnPageContent() {
   // clicking looked like it did nothing, and there was no way to tell the click even registered.
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [playback, setPlayback] = useState<Record<string, { bunnyVideoId: string; bunnyLibraryId: string; subjectId: string | null } | null>>({});
+  const [playback, setPlayback] = useState<Record<string, { bunnyVideoId: string; bunnyLibraryId: string; bunnyToken: string | null; bunnyTokenExpires: number | null; subjectId: string | null } | null>>({});
   const [playbackLoading, setPlaybackLoading] = useState<string | null>(null);
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
   const [subscribed, setSubscribed] = useState<boolean | null>(null);
@@ -170,6 +179,8 @@ function LearnPageContent() {
         const data = result.data as {
           bunnyVideoId: string;
           bunnyLibraryId: string;
+          bunnyToken: string | null;
+          bunnyTokenExpires: number | null;
           subjectId: string | null;
           freePreviewSecondsRemaining: number | null;
         };
@@ -366,7 +377,7 @@ function LearnPageContent() {
                 )}
                 {playingId === lesson.id && playback[lesson.id]?.bunnyVideoId && (
                   <iframe
-                    src={`https://iframe.mediadelivery.net/embed/${playback[lesson.id]!.bunnyLibraryId}/${playback[lesson.id]!.bunnyVideoId}`}
+                    src={bunnyEmbedUrl(playback[lesson.id]!)}
                     className="w-full aspect-video bg-ink rounded-xl mt-3"
                     style={{ border: "none" }}
                     allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"

@@ -15,6 +15,23 @@ service cloud.firestore {
                 && uidA in get(/databases/$(database)/documents/users/$(uidB)).data.get('blockedUserIds', []));
     }
 
+    // Mirrors the posts/{postId} `allow read` condition below exactly — used to gate the
+    // likes/comments subcollections underneath a post. Those used to be `allow read: if true`
+    // unconditionally (and their creates never checked the parent at all), which meant anyone who
+    // learned a private or flagged post's ID — e.g. from a stale share link, or just by guessing —
+    // could still read (and add to) its comments and likes even though the post document itself
+    // was correctly locked down. A post's own subcollections need their own explicit check here;
+    // Firestore doesn't apply a parent document's rules to its subcollections automatically.
+    function postIsVisible(postId) {
+      let path = /databases/$(database)/documents/posts/$(postId);
+      return !exists(path)
+        || (get(path).data.visibility != 'private' && get(path).data.moderationStatus != 'flagged')
+        || (request.auth != null && (
+              request.auth.uid == get(path).data.ownerId ||
+              (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true)
+            ));
+    }
+
     match /users/{userId} {
       // Was `if request.auth != null` — any signed-in account, not just this doc's owner, could
       // read the WHOLE document, including stripeCustomerId, payoutOwed, and subscriptionStatus.
@@ -120,7 +137,7 @@ service cloud.firestore {
       // the same account structurally impossible — creating over an existing doc ID is an
       // update, not a create, and there's no update rule here, so it's denied outright.
       match /likes/{userId} {
-        allow read: if true;
+        allow read: if postIsVisible(postId);
         // Can't like your own post — without this, liking your own post from your own account
         // inflates your own real-money Creative Prize likeCount for free. (This can't stop
         // someone liking their own post from a *different* account they also control — that's
@@ -129,19 +146,24 @@ service cloud.firestore {
         // Also blocks a like the moment either side has blocked the other — without this, a
         // blocked user could still like the blocker's post (or vice versa) by writing this doc
         // straight from the client (LikeButton.tsx never goes through a callable), completely
-        // bypassing the block feature for this one interaction.
+        // bypassing the block feature for this one interaction. postIsVisible closes the other
+        // gap: without it, anyone who had a private/flagged post's ID could still like it even
+        // though they could never actually see the post itself.
         allow create: if request.auth != null && request.auth.uid == userId
+          && postIsVisible(postId)
           && userId != get(/databases/$(database)/documents/posts/$(postId)).data.ownerId
           && !isBlockedPair(request.auth.uid, get(/databases/$(database)/documents/posts/$(postId)).data.ownerId);
         allow delete: if request.auth != null && request.auth.uid == userId;
       }
 
       match /comments/{commentId} {
-        allow read: if true;
+        allow read: if postIsVisible(postId);
         // Same reasoning as the like create rule above — Comments.tsx writes this doc directly
         // from the client, so without this check a blocked user could still comment on the
-        // blocker's post (or vice versa).
+        // blocker's post (or vice versa). postIsVisible closes the same visibility gap described
+        // on the likes rule above.
         allow create: if request.auth != null
+          && postIsVisible(postId)
           && request.resource.data.userId == request.auth.uid
           && !isBlockedPair(request.auth.uid, get(/databases/$(database)/documents/posts/$(postId)).data.ownerId);
         allow delete: if request.auth != null
@@ -164,8 +186,13 @@ service cloud.firestore {
     // Bunny embed URL directly, completely bypassing the subscription paywall.
     match /lessons/{lessonId} {
       allow read: if true;
+      // The viewCount-only branch used to allow ANY signed-in user to set it to literally any
+      // value (any type, any size, even negative) — client code only ever calls
+      // increment(1) (see app/learn/page.tsx), so requiring the new value to be exactly one more
+      // than the current one enforces that server-side instead of just trusting the client.
       allow update: if request.auth != null && (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount']) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
+          && request.resource.data.viewCount == resource.data.get('viewCount', 0) + 1) ||
         (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true)
       );
       allow create, delete: if request.auth != null
@@ -193,6 +220,14 @@ service cloud.firestore {
       allow read: if true;
       allow create, update, delete: if request.auth != null
         && (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true);
+    }
+
+    // Records that getLessonPlayback actually granted this account access to a given lesson —
+    // completeLesson checks this before awarding XP/streak credit (see its comment in
+    // functions/index.js). Written only by getLessonPlayback (Admin SDK, bypasses this rule); no
+    // legitimate reason for a client to read or write it directly.
+    match /lessonPlaybackGrants/{grantId} {
+      allow read, write: if false;
     }
 
     // Tracks which lessons a user has completed

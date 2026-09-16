@@ -10,6 +10,7 @@ import LikeButton from "@/components/LikeButton";
 import Comments from "@/components/Comments";
 import ShareMenu from "@/components/ShareMenu";
 import { ADMIN_EMAILS } from "@/lib/admin";
+import { usePostMediaUrl } from "@/lib/resizedImage";
 
 const deletePostFn = httpsCallable(functions, "deletePost");
 
@@ -70,6 +71,12 @@ export default function PostPage() {
     load();
   }, [params.id]);
 
+  // See usePostMediaUrl's comment: fetches a fresh, rules-checked download URL from mediaPath
+  // instead of trusting the permanent public token stored in mediaUrl, so this deep-linkable page
+  // (the most likely place a stale link would get shared/cached) can't keep serving a private or
+  // later-flagged post's media forever just because a viewer's copy of the URL still has it.
+  const mediaUrl = usePostMediaUrl(post?.mediaPath, post?.mediaUrl ?? null);
+
   if (missing) notFound();
   if (blocked) {
     return <p className="text-ink/50 text-center py-16">This post is private.</p>;
@@ -102,12 +109,12 @@ export default function PostPage() {
           allowFullScreen
         />
       )}
-      {post.type === "video" && !post.bunnyVideoId && (
-        <video src={post.mediaUrl} className="w-full aspect-video bg-ink rounded-2xl" controls />
+      {post.type === "video" && !post.bunnyVideoId && mediaUrl && (
+        <video src={mediaUrl} className="w-full aspect-video bg-ink rounded-2xl" controls />
       )}
-      {post.type === "photo" && (
+      {post.type === "photo" && mediaUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={post.mediaUrl} alt={post.title || "Post"} className="w-full rounded-2xl bg-ink" />
+        <img src={mediaUrl} alt={post.title || "Post"} className="w-full rounded-2xl bg-ink" />
       )}
       {post.type === "text" && (
         <p className="font-display text-2xl font-bold whitespace-pre-wrap">{post.body}</p>
