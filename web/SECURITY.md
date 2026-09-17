@@ -1,11 +1,26 @@
 # Astryks Security Posture
 
-Last updated: 2026-08-12. This document is the single source of truth for what's protected, what's deliberately deferred (and why), and what to check before shipping anything that touches user data, money, or auth.
+Last updated: 2026-09-18 AEST. This document is the single source of truth for what's protected, what's deliberately deferred (and why), and what to check before shipping anything that touches user data, money, or auth.
+
+## 2026-09-18 AEST — H2 legacy Storage world-read closed
+
+- **What changed:** `web/storage.rules` legacy match `posts/{userId}/{fileName}` no longer uses
+  `allow read: if true`. Reads are **owner-only**
+  (`request.auth != null && request.auth.uid == userId`). Writes were already denied
+  (`allow write: if false`) and stay denied. The visibility-aware
+  `posts/{userId}/{postId}/{fileName}` rules are unchanged.
+- **Why:** Anonymous/cross-user clients could still fetch private/flagged media that remained on
+  the pre-postId flat path. Owner-only read stops that exfiltration while owners can still load
+  their own files during migration.
+- **Ops (Sid):** Finish / re-run the admin callable `migratePrivatePostMedia` (Firebase console
+  or authenticated callable) so remaining private legacy objects move to the postId-scoped path.
+  `securePostMediaOnHide` continues to migrate on hide/flag (Admin SDK; unaffected by Storage
+  rules). Once legacy is empty, follow-up: flip legacy read to `allow read: if false`.
 
 ## What's protected today
 
 **Data isolation & privacy**
-- Firestore and Storage security rules enforce per-user ownership on all reads/writes (posts, profiles, messages, payout details, refund requests).
+- Firestore and Storage security rules enforce per-user ownership on sensitive reads/writes (posts, profiles, messages, payout details, refund requests). Legacy flat post media (`posts/{uid}/{fileName}`) is owner-read / write-denied as of H2 2026-09-18; new post media is visibility-aware via postId-in-path. Avatars remain publicly readable by design.
 - Post media (web and mobile) is written under a path keyed by the post's own document ID (`posts/{uid}/{postId}/...`), not a flat public path — so a post marked "Private" can't be reached by guessing a URL.
 - No financial detail (card numbers, bank details) ever touches our own servers or database — Stripe Checkout/Billing Portal handles all of that via full-page redirect; Qonversion handles mobile in-app-purchase receipts. We only ever store Stripe/Qonversion customer + subscription IDs.
 

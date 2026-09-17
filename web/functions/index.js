@@ -2777,8 +2777,8 @@ exports.migratePrivatePostMedia = onCall(async (request) => {
 // changed:
 //   1. If its media is still sitting on the pre-postId flat Storage layout
 //      (posts/{ownerId}/{fileName} — storage.rules has no postId to check visibility against
-//      for that layout, so it leaves it world-readable), move it onto the postId-scoped layout
-//      that storage.rules DOES gate, and remove the old public copy.
+//      for that layout; H2 made it owner-read only, still not visibility-aware), move it onto
+//      the postId-scoped layout that storage.rules DOES gate, and remove the old copy.
 //   2. Rotate the file's firebaseStorageDownloadTokens and clear any stored `mediaUrl`. A
 //      download-token URL keeps working forever for anyone who has it regardless of
 //      storage.rules (see usePostMediaUrl's comment) — gating reads isn't enough on its own; a

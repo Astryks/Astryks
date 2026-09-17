@@ -37,18 +37,21 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*|video/.*');
     }
 
-    // Legacy flat path, from before post media carried the post's own ID above — reads stay
-    // public since Storage has no way to look up which post one of these files belongs to, so a
-    // still-public legacy post's visibility can't be checked here (see postIsHidden above,
-    // which needs a postId). Every client (ShareComposer.tsx/home.tsx/me.tsx, web + mobile)
-    // already writes to the postId-scoped layout above instead, and both
-    // migratePrivatePostMedia (bulk) and securePostMediaOnHide (per-post, on every write) in
-    // functions/index.js move any post that goes private/flagged off this layout automatically
-    // — so nothing legitimate should ever write here again. Denying writes closes off the flat
-    // layout as an evasion route (e.g. a client that deliberately omits postId from the path to
-    // dodge postIsHidden) rather than just relying on nobody doing that.
+    // Legacy flat path, from before post media carried the post's own ID above. Storage has
+    // no postId here to run postIsHidden, so we cannot mirror the visibility-aware rules on
+    // the postId-scoped layout above. Every client (ShareComposer.tsx/home.tsx/me.tsx, web +
+    // mobile) already writes to that layout instead, and both migratePrivatePostMedia (bulk)
+    // and securePostMediaOnHide (per-post, on every write) in functions/index.js move any post
+    // that goes private/flagged off this layout automatically — so nothing legitimate should
+    // ever write here again. Denying writes closes off the flat layout as an evasion route
+    // (e.g. a client that deliberately omits postId to dodge postIsHidden).
+    //
+    // H2 (2026-09-18): closed world-read to owner-only so anonymous/cross-user clients cannot
+    // exfiltrate private/flagged media still sitting on this path; owners can still load their
+    // own files during migration. After migratePrivatePostMedia empties legacy, prefer
+    // `allow read: if false` in a follow-up.
     match /posts/{userId}/{fileName} {
-      allow read: if true;
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;
     }
 
