@@ -125,23 +125,31 @@ async function enforceRateLimit(uid, action, { max, windowMs }) {
 // resubscribe, only needs the one read this function already does).
 async function updatePlatformSubscriptionStatus(uid, platform, isActive, extraFieldsFn) {
   const userRef = db.doc(`users/${uid}`);
-  const snap = await userRef.get();
-  const data = snap.data() || {};
-  const otherPlatform = platform === "stripe" ? "iap" : "stripe";
-  const otherActive = data[`${otherPlatform}SubscriptionStatus`] === "active";
-  const wasOverallActive = data.subscriptionStatus === "active";
-  const overallActive = isActive || otherActive;
+  // Read-modify-write, wrapped in a transaction: Stripe and Qonversion webhooks can land within
+  // moments of each other (e.g. a resubscribe on one platform right as the other's webhook is
+  // still processing), and two concurrent plain get()-then-set() calls here could each compute
+  // `overallActive` from the same stale read, so the platform that wrote second would silently
+  // undo whatever the first one just set for its own platform's status field. A transaction
+  // makes Firestore retry one of them against the other's committed result instead.
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+    const data = snap.data() || {};
+    const otherPlatform = platform === "stripe" ? "iap" : "stripe";
+    const otherActive = data[`${otherPlatform}SubscriptionStatus`] === "active";
+    const wasOverallActive = data.subscriptionStatus === "active";
+    const overallActive = isActive || otherActive;
 
-  const update = {
-    [`${platform}SubscriptionStatus`]: isActive ? "active" : "canceled",
-    subscriptionStatus: overallActive ? "active" : "canceled",
-    ...(extraFieldsFn ? extraFieldsFn(data) : {}),
-  };
-  if (wasOverallActive && !overallActive) {
-    update.canceledAt = admin.firestore.FieldValue.serverTimestamp();
-  }
-  await userRef.set(update, { merge: true });
-  return { overallActive, wasOverallActive };
+    const update = {
+      [`${platform}SubscriptionStatus`]: isActive ? "active" : "canceled",
+      subscriptionStatus: overallActive ? "active" : "canceled",
+      ...(extraFieldsFn ? extraFieldsFn(data) : {}),
+    };
+    if (wasOverallActive && !overallActive) {
+      update.canceledAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+    tx.set(userRef, update, { merge: true });
+    return { overallActive, wasOverallActive };
+  });
 }
 
 const BUNNY_API_KEY = defineSecret("BUNNY_API_KEY");
@@ -160,6 +168,41 @@ const stripeSecret = defineSecret("STRIPE_SECRET_KEY");
 // Update with the email(s) allowed to do admin-only things: delete anyone's post,
 // upload lessons/trailers.
 const ADMIN_EMAILS = ["mehta.siddharth09@gmail.com"];
+
+// A single hardcoded email is a single point of failure (that exact account is compromised or
+// its address changes -> nobody's an admin) and adding a second admin means a source change and
+// a redeploy. isAdminAuth is the one place that decides "is this caller an admin" — it accepts
+// EITHER the legacy verified-email allowlist above OR a `admin: true` custom claim (see
+// grantAdminClaim below, which the existing ADMIN_EMAILS account can call to promote itself or
+// anyone else without touching this array again). Deliberately additive, not a replacement: every
+// existing admin check keeps working exactly as before even before grantAdminClaim has ever been
+// run for a given account.
+function isAdminAuth(auth) {
+  return !!auth && (
+    auth.token?.admin === true ||
+    (ADMIN_EMAILS.includes(auth.token?.email ?? "") && auth.token?.email_verified === true)
+  );
+}
+
+// Callable (admin-only): sets the `admin: true` custom claim on an account. The caller must
+// already be recognized as an admin themselves (via ADMIN_EMAILS or an existing claim) — this
+// can't self-bootstrap the very first admin from a normal account, only extend admin access
+// from one that already has it. Safe to trigger once from the browser console (same pattern as
+// backfillPostVisibility/migratePrivatePostMedia above) to move off ADMIN_EMAILS entirely once
+// every real admin account has been granted the claim. Note the claim only takes effect on that
+// account's NEXT ID token refresh (sign out/in, or up to an hour) — not the current session.
+exports.grantAdminClaim = onCall(async (request) => {
+  if (!isAdminAuth(request.auth)) {
+    throw new HttpsError("permission-denied", "Admins only.");
+  }
+  const targetEmail = request.data?.email;
+  if (!targetEmail) {
+    throw new HttpsError("invalid-argument", "email is required.");
+  }
+  const targetUser = await admin.auth().getUserByEmail(targetEmail);
+  await admin.auth().setCustomUserClaims(targetUser.uid, { admin: true });
+  return { uid: targetUser.uid, email: targetEmail };
+});
 
 // A fixed pseudo-account representing Astryks support in the Messages UI.
 // It's not a real Firebase Auth user — just a shared participant ID so the
@@ -406,7 +449,7 @@ exports.createBunnyUpload = onCall(
 
     // Only the Astryks team can create Bunny videos — this backs up the client-side
     // admin-only gate on the lesson/trailer upload pages, which alone isn't real security.
-    if (!(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
 
@@ -479,6 +522,7 @@ function isPrivateOrLoopbackHostname(hostname) {
     if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
     if (a === 192 && b === 168) return true; // 192.168.0.0/16
     if (a === 0) return true; // 0.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 — carrier-grade NAT
   }
   // IPv4-mapped/NAT64/6to4 IPv6 literals — recurse on the embedded IPv4 address so it goes
   // through the exact same private-range checks above instead of being missed entirely (a bare
@@ -658,7 +702,7 @@ exports.fetchLinkPreview = onCall(async (request) => {
 // has a linkImage. Admin-only; trigger it once from the browser console, same as
 // backfillLessonPlayback/backfillPostVisibility elsewhere in this file.
 exports.backfillYoutubeLinkPreviews = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const snap = await db.collection("posts").where("type", "==", "link").get();
@@ -783,7 +827,7 @@ exports.deleteLesson = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be logged in.");
     }
-    if (!(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
 
@@ -849,7 +893,7 @@ exports.createLesson = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "You must be logged in.");
   }
-  if (!(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
 
@@ -905,7 +949,7 @@ exports.migrateLessonPlaybackFields = onDocumentWritten("lessons/{lessonId}", as
 // it doesn't retroactively fix already-created docs). Safe to run more than once. Admin-only;
 // trigger it once from the browser console, same as backfillPostVisibility below.
 exports.backfillLessonPlayback = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const snap = await db.collection("lessons").get();
@@ -964,7 +1008,7 @@ exports.getLessonPlayback = onCall({ secrets: [BUNNY_STREAM_TOKEN_KEY] }, async 
   const lessonDocSnap = await db.doc(`lessons/${lessonId}`).get();
   const subjectId = lessonDocSnap.data()?.subjectId || null;
 
-  const isAdmin = (ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true);
+  const isAdmin = (isAdminAuth(request.auth));
   let freePreviewSecondsRemaining = null;
   if (!isAdmin) {
     const userSnap = await db.doc(`users/${request.auth.uid}`).get();
@@ -995,22 +1039,30 @@ exports.getLessonPlayback = onCall({ secrets: [BUNNY_STREAM_TOKEN_KEY] }, async 
   // reportPreviewProgress again. Tying a free-preview viewer's token expiry to however much of
   // their allowance is actually left means the credential itself stops working once that time is
   // up, regardless of whether the client ever reported its progress honestly. Subscribers/admins
-  // get a longer, flat TTL since there's no allowance to bound it by. Falls back to no token
-  // (current unsigned behavior) until Token Authentication is enabled for the lessons library in
-  // the Bunny dashboard and BUNNY_STREAM_TOKEN_KEY is set — see its definition above.
-  let bunnyToken = null;
-  let bunnyTokenExpires = null;
+  // get a longer, flat TTL since there's no allowance to bound it by.
+  //
+  // Fails closed if the secret isn't set, rather than the old behavior of silently falling back
+  // to unsigned bare IDs: BUNNY_STREAM_TOKEN_KEY is set in production (Token Authentication is
+  // enabled for the lessons library in the Bunny dashboard as of the commit that turned this on),
+  // so a missing value here means something is actually broken — a secret rotation gap, a
+  // misconfigured deploy — not a deliberate pre-Token-Auth bridge state. Handing out an unsigned
+  // embed in that situation would let anyone who captures a video/library ID once replay it
+  // forever with no preview cap and no subscription check, which is exactly what Token Auth
+  // exists to prevent; ops risk from a missing secret has to show up as a loud failure, not a
+  // silent downgrade to no security at all.
   const tokenKey = BUNNY_STREAM_TOKEN_KEY.value();
-  if (tokenKey) {
-    const ttlSeconds = freePreviewSecondsRemaining === null
-      ? 3 * 60 * 60 // subscriber/admin: flat 3-hour window, no allowance to bound it by
-      : Math.max(freePreviewSecondsRemaining + 60, 120); // free preview: bounded by what's left
-    bunnyTokenExpires = Math.floor(Date.now() / 1000) + ttlSeconds;
-    bunnyToken = crypto
-      .createHash("sha256")
-      .update(`${tokenKey}${data.bunnyVideoId}${bunnyTokenExpires}`)
-      .digest("hex");
+  if (!tokenKey) {
+    console.error("getLessonPlayback: BUNNY_STREAM_TOKEN_KEY is not set — refusing to serve unsigned playback");
+    throw new HttpsError("failed-precondition", "Video playback is temporarily unavailable — please try again shortly.");
   }
+  const ttlSeconds = freePreviewSecondsRemaining === null
+    ? 3 * 60 * 60 // subscriber/admin: flat 3-hour window, no allowance to bound it by
+    : Math.max(freePreviewSecondsRemaining + 60, 120); // free preview: bounded by what's left
+  const bunnyTokenExpires = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const bunnyToken = crypto
+    .createHash("sha256")
+    .update(`${tokenKey}${data.bunnyVideoId}${bunnyTokenExpires}`)
+    .digest("hex");
 
   // Recorded so completeLesson below can require proof that this account was actually granted
   // (and, by extension, subscribed/within its free-preview allowance for) this specific lesson
@@ -1153,7 +1205,7 @@ exports.deletePost = onCall(
 
     const post = postSnap.data();
     const isOwner = post.ownerId === request.auth.uid;
-    const isAdmin = (ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true);
+    const isAdmin = (isAdminAuth(request.auth));
 
     if (!isOwner && !isAdmin) {
       throw new HttpsError("permission-denied", "You can only delete your own posts.");
@@ -1243,7 +1295,7 @@ exports.submitReport = onCall(
 );
 
 exports.getReports = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const snap = await db
@@ -1298,7 +1350,7 @@ exports.getReports = onCall(async (request) => {
 exports.resolveReport = onCall(
   { secrets: [BUNNY_API_KEY, BUNNY_LIBRARY_ID, stripeSecret, SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
     // clientTargetUid is the ownerId/userId the admin's own screen already had loaded (from
@@ -1420,7 +1472,7 @@ exports.logClientError = onCall(async (request) => {
 });
 
 exports.getClientErrors = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const includeResolved = !!request.data?.includeResolved;
@@ -1438,7 +1490,7 @@ exports.getClientErrors = onCall(async (request) => {
 });
 
 exports.resolveClientError = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const errorId = request.data?.errorId;
@@ -1495,7 +1547,7 @@ async function sendHallOfFameBotMessage(ownerId, ownerName, text) {
 
 // ---------- Callable: admin-only — manually feature a post in the Hall of Fame ----------
 exports.addToHallOfFame = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const { postId } = request.data ?? {};
@@ -1537,7 +1589,7 @@ exports.addToHallOfFame = onCall(async (request) => {
 
 // ---------- Callable: admin-only — un-feature a post (e.g. added by mistake) ----------
 exports.removeFromHallOfFame = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const { postId } = request.data ?? {};
@@ -1964,7 +2016,7 @@ const _legacy_submitPrizePayoutDetails = onCall(
 // ---------- Callable: admin-only — every month's creative-prize winner + payout/paid status ----------
 
 const _legacy_getPrizeWinners = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const snap = await db.collection("prizeWinners").orderBy("month", "desc").limit(60).get();
@@ -2007,7 +2059,7 @@ const _legacy_getPrizeWinners = onCall(async (request) => {
 // see app/messages/[conversationId]/page.tsx) so there's a clear, low-friction way for them to
 // add their details even if they skipped it the first time.
 const _legacy_sendPayoutReminder = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const { postId } = request.data ?? {};
@@ -2033,7 +2085,7 @@ const _legacy_sendPayoutReminder = onCall(async (request) => {
 // ---------- Callable: admin-only — mark a month's prize as paid (or undo that) ----------
 
 const _legacy_markPrizeWinnerPaid = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const { month, paid } = request.data ?? {};
@@ -2060,7 +2112,7 @@ const _legacy_markPrizeWinnerPaid = onCall(async (request) => {
 const _legacy_approvePrizeWinnerAnnouncement = onCall(
   { secrets: [SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
     const { month } = request.data ?? {};
@@ -2141,7 +2193,7 @@ const _legacy_approvePrizeWinnerAnnouncement = onCall(
 // exists for. Only works before approvePrizeWinnerAnnouncement has fired (once someone's been told they
 // won, that can't be walked back), and the replacement must be one of that month's own recorded nominees.
 const _legacy_overridePrizeWinner = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const { month, postId } = request.data ?? {};
@@ -2329,7 +2381,7 @@ exports.deleteUserAccount = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be logged in.");
     }
-    if (!(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
 
@@ -2458,7 +2510,7 @@ exports.getUserPosts = onCall(async (request) => {
   if (!userId) {
     throw new HttpsError("invalid-argument", "userId is required.");
   }
-  const isAdmin = (ADMIN_EMAILS.includes(request.auth?.token?.email ?? "") && request.auth?.token?.email_verified === true);
+  const isAdmin = isAdminAuth(request.auth);
 
   const blockedSet = await getBlockedSet(callerUid);
   if (blockedSet.has(userId) && !isAdmin) {
@@ -2642,7 +2694,7 @@ exports.getBlockedUsers = onCall(async (request) => {
 // the field set. Admin-only; trigger it once from the browser console
 // (see the note in the delivery message) rather than exposing it in the UI.
 exports.backfillPostVisibility = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const snap = await db.collection("posts").get();
@@ -2668,7 +2720,7 @@ exports.backfillPostVisibility = onCall(async (request) => {
 // more than once: anything already on the new layout (already migrated, or created after the
 // fix shipped) is skipped, not touched.
 exports.migratePrivatePostMedia = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
 
@@ -2696,21 +2748,18 @@ exports.migratePrivatePostMedia = onCall(async (request) => {
 
     const newPath = `posts/${post.ownerId}/${docSnap.id}/${parts[2]}`;
     try {
-      const [oldMetadata] = await bucket.file(oldPath).getMetadata();
-      let token = oldMetadata.metadata && oldMetadata.metadata.firebaseStorageDownloadTokens;
-
       await bucket.file(oldPath).copy(bucket.file(newPath));
 
-      // A Cloud Storage copy carries the source's custom metadata (including the download
-      // token) over to the new file, so the existing token should already work at the new
-      // path. Only mint a fresh one on the off chance an older upload never had one.
-      if (!token) {
-        token = crypto.randomUUID();
-        await bucket.file(newPath).setMetadata({ metadata: { firebaseStorageDownloadTokens: token } });
-      }
-      const mediaUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(newPath)}?alt=media&token=${token}`;
+      // Always mint a brand-new token rather than reusing/carrying the old one forward (a
+      // Cloud Storage copy otherwise carries the source's custom metadata, download token
+      // included, over to the new file). The whole point of this migration is that the post is
+      // private — the pre-migration token may already be circulating and has to stop working,
+      // not just move to a new path under the same value. Nothing should read via this token
+      // going forward anyway; media is fetched through mediaPath (usePostMediaUrl /
+      // useResizedImageUrl), which is what actually gets storage.rules re-checked each view.
+      await bucket.file(newPath).setMetadata({ metadata: { firebaseStorageDownloadTokens: crypto.randomUUID() } });
 
-      await docSnap.ref.update({ mediaUrl, mediaPath: newPath });
+      await docSnap.ref.update({ mediaPath: newPath, mediaUrl: admin.firestore.FieldValue.delete() });
       await bucket.file(oldPath).delete().catch(() => {});
       migrated++;
     } catch (err) {
@@ -2721,6 +2770,62 @@ exports.migratePrivatePostMedia = onCall(async (request) => {
   return { migrated, skipped, failed };
 });
 
+// migratePrivatePostMedia above is a manual, one-off bulk job — it only catches posts that were
+// ALREADY private the moment an admin ran it. A post can go private/flagged at any later time
+// (the client flips `visibility` directly, and moderatePostMedia flags automatically), so this
+// mirrors that same fix automatically on every post write, for whichever single post just
+// changed:
+//   1. If its media is still sitting on the pre-postId flat Storage layout
+//      (posts/{ownerId}/{fileName} — storage.rules has no postId to check visibility against
+//      for that layout, so it leaves it world-readable), move it onto the postId-scoped layout
+//      that storage.rules DOES gate, and remove the old public copy.
+//   2. Rotate the file's firebaseStorageDownloadTokens and clear any stored `mediaUrl`. A
+//      download-token URL keeps working forever for anyone who has it regardless of
+//      storage.rules (see usePostMediaUrl's comment) — gating reads isn't enough on its own; a
+//      token minted while the post was still public has to stop working the moment it's hidden.
+exports.securePostMediaOnHide = onDocumentWritten("posts/{postId}", async (event) => {
+  const postId = event.params.postId;
+  const after = event.data?.after;
+  const post = after?.data();
+  if (!post || !post.mediaPath || !post.ownerId) return;
+
+  const isHidden = post.visibility === "private" || post.moderationStatus === "flagged";
+  if (!isHidden) return;
+
+  const bucket = admin.storage().bucket();
+  let mediaPath = post.mediaPath;
+  const updates = {};
+
+  // Flat legacy layout is exactly posts/{ownerId}/{fileName} — three segments. Four segments
+  // (posts/{ownerId}/{postId}/{fileName}) means it's already on the gated layout.
+  const parts = mediaPath.split("/");
+  if (parts.length === 3 && parts[0] === "posts" && parts[1] === post.ownerId) {
+    const newPath = `posts/${post.ownerId}/${postId}/${parts[2]}`;
+    try {
+      await bucket.file(mediaPath).copy(bucket.file(newPath));
+      await bucket.file(mediaPath).delete().catch(() => {});
+      mediaPath = newPath;
+      updates.mediaPath = newPath;
+    } catch (err) {
+      console.error("securePostMediaOnHide: legacy path migration failed", postId, err);
+    }
+  }
+
+  if (post.mediaUrl) {
+    updates.mediaUrl = admin.firestore.FieldValue.delete();
+  }
+
+  try {
+    await bucket.file(mediaPath).setMetadata({ metadata: { firebaseStorageDownloadTokens: crypto.randomUUID() } });
+  } catch (err) {
+    console.error("securePostMediaOnHide: token rotation failed", postId, err);
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await after.ref.update(updates);
+  }
+});
+
 // ---------- Callable: list every signed-up account (admin dashboard) ----------
 // Firebase Authentication is the actual source of truth for email/signup-date/last-login —
 // there's no Firestore doc that reliably has all of that (see the note on sendWelcomeEmailTo
@@ -2729,7 +2834,7 @@ exports.migratePrivatePostMedia = onCall(async (request) => {
 // hand. Capped at 1000 accounts for now — fine at today's scale, worth paging if it grows past
 // that.
 exports.listAllUsers = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const [authList, usersSnap] = await Promise.all([
@@ -3089,7 +3194,7 @@ exports.onProfileCreated = onDocumentCreated(
 exports.sendTestWelcomeEmail = onCall(
   { secrets: [SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
     const displayName = request.auth.token.name || "there";
@@ -4051,7 +4156,7 @@ async function sendBrandedEmail(email, { subject, text, html }) {
 exports.sendTestSubscriptionEmail = onCall(
   { secrets: [SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
     await sendBrandedEmail(
@@ -4065,7 +4170,7 @@ exports.sendTestSubscriptionEmail = onCall(
 exports.sendTestCancellationEmail = onCall(
   { secrets: [SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
     await sendBrandedEmail(request.auth.token.email, buildCancellationEmail(request.auth.token.name || "there"));
@@ -4076,7 +4181,7 @@ exports.sendTestCancellationEmail = onCall(
 exports.sendTestRefundEmail = onCall(
   { secrets: [SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
     await sendBrandedEmail(
@@ -4094,7 +4199,7 @@ exports.sendTestRefundEmail = onCall(
 exports.sendTestLifecycleNudgeEmails = onCall(
   { secrets: [SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
     const name = request.auth.token.name || "there";
@@ -4114,7 +4219,7 @@ exports.sendTestLifecycleNudgeEmails = onCall(
 exports.sendTestNewLifecycleEmails = onCall(
   { secrets: [SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
     }
     const name = request.auth.token.name || "there";
@@ -4573,6 +4678,10 @@ exports.createBillingPortalSession = onCall(
   { secrets: [stripeSecret] },
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "You must be logged in.");
+    // Same reasoning as verifyPurchase/getLessonPlayback/fetchLinkPreview above: this hits the
+    // Stripe API on the caller's behalf, so it needs a limit even though the normal UI only
+    // calls it on a deliberate "Manage billing" click.
+    await enforceRateLimit(request.auth.uid, "createBillingPortalSession", { max: 10, windowMs: 10 * 60 * 1000 });
     const stripe = Stripe(stripeSecret.value());
     const userSnap = await db.doc(`users/${request.auth.uid}`).get();
     const customerId = userSnap.data()?.stripeCustomerId;
@@ -4820,7 +4929,7 @@ exports.getMyRefundStatus = onCall(async (request) => {
 // ---------- Callable: admin lists every refund request ----------
 
 exports.getRefundRequests = onCall(async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "Admins only.");
   }
 
@@ -4848,7 +4957,7 @@ exports.getRefundRequests = onCall(async (request) => {
 exports.approveRefund = onCall(
   { secrets: [stripeSecret, SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS, SUPPORT_EMAIL_TO] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "Admins only.");
     }
     const requestId = request.data?.requestId;
@@ -4911,10 +5020,12 @@ exports.approveRefund = onCall(
       );
     }
 
-    await db.doc(`users/${refundRequest.uid}`).set(
-      { subscriptionStatus: "canceled", canceledAt: admin.firestore.FieldValue.serverTimestamp() },
-      { merge: true }
-    );
+    // updatePlatformSubscriptionStatus (not a plain write) is what keeps this from clobbering a
+    // still-active IAP entitlement: this refund only ever touches the Stripe side, but a direct
+    // `subscriptionStatus: "canceled"` write here used to blow away the union of both platforms
+    // regardless of whether the same account also had a live mobile IAP subscription — refunding
+    // their web purchase would silently kill access they separately paid for on mobile too.
+    await updatePlatformSubscriptionStatus(refundRequest.uid, "stripe", false);
 
     const amountDisplay = formatCents(refundedCents, currency);
     await reqRef.set(
@@ -5043,7 +5154,7 @@ const _legacy_getPayoutAccountStatus = onCall(async (request) => {
 // page only shows this button once that's true; the manual copy-fields panel is always there
 // as a fallback regardless.
 const _legacy_payWinnerViaStripe = onCall({ secrets: [stripeSecret] }, async (request) => {
-  if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+  if (!request.auth || !(isAdminAuth(request.auth))) {
     throw new HttpsError("permission-denied", "This action is for the Astryks team only.");
   }
   const { month } = request.data ?? {};
@@ -5414,6 +5525,11 @@ exports.verifyPurchase = onCall({ secrets: [qonversionSecretKey] }, async (reque
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "You must be logged in.");
   }
+
+  // Same reasoning as getLessonPlayback/fetchLinkPreview above: this hits an external API
+  // (Qonversion) on the caller's behalf, so without a limit a modified client could hammer it
+  // in a tight loop instead of the normal occasional polling this is meant for.
+  await enforceRateLimit(request.auth.uid, "verifyPurchase", { max: 10, windowMs: 10 * 60 * 1000 });
 
   const secretKey = qonversionSecretKey.value();
   if (!secretKey) {
@@ -5848,7 +5964,7 @@ const _legacy_sendMonthlyPrizeReport = onSchedule(
 const _legacy_runPrizeReportNow = onCall(
   { secrets: [SUPPORT_EMAIL_USER, SUPPORT_EMAIL_PASS, SUPPORT_EMAIL_TO] },
   async (request) => {
-    if (!request.auth || !(ADMIN_EMAILS.includes(request.auth.token.email ?? "") && request.auth.token.email_verified === true)) {
+    if (!request.auth || !(isAdminAuth(request.auth))) {
       throw new HttpsError("permission-denied", "Admin only.");
     }
 

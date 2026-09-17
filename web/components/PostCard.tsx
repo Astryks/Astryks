@@ -11,7 +11,7 @@ import SaveButton from "@/components/SaveButton";
 import FollowButton from "@/components/FollowButton";
 import ReportModal from "@/components/ReportModal";
 import ShareMenu from "@/components/ShareMenu";
-import { useResizedImageUrl } from "@/lib/resizedImage";
+import { useResizedImageUrl, usePostMediaUrl } from "@/lib/resizedImage";
 import { ADMIN_EMAILS } from "@/lib/admin";
 import { ensureConversation } from "@/lib/conversations";
 
@@ -41,7 +41,13 @@ export default function PostCard({
   const inHallOfFame = hallOfFameOverride ?? !!post.hallOfFame;
   const isAdmin = user && ADMIN_EMAILS.includes(user.email ?? "");
   const canDelete = user && (user.uid === post.ownerId || isAdmin);
-  const displayMediaUrl = useResizedImageUrl(post.type === "photo" ? post.mediaPath : null, post.mediaUrl);
+  // usePostMediaUrl re-fetches through mediaPath (storage.rules-gated) rather than trusting
+  // post.mediaUrl directly — a stored mediaUrl is a permanent download token that ignores
+  // storage.rules entirely, so a post that's since gone private/flagged would otherwise still
+  // render for anyone in the feed. Falls back to the raw mediaUrl only for legacy posts with no
+  // mediaPath at all (nothing to re-check rules against for those).
+  const safeMediaUrl = usePostMediaUrl(post.mediaPath, post.mediaUrl ?? null);
+  const displayMediaUrl = useResizedImageUrl(post.type === "photo" ? post.mediaPath : null, safeMediaUrl ?? "");
 
   async function handleReport(reason: string, details: string) {
     await submitReportFn({ targetType: "post", targetId: post.id, reason, details });
@@ -136,7 +142,7 @@ export default function PostCard({
           <div className="relative">
             <video
               ref={videoRef}
-              src={post.mediaUrl}
+              src={safeMediaUrl ?? undefined}
               className="w-full aspect-video bg-ink object-cover"
               loop
               muted={muted}
