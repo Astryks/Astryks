@@ -92,12 +92,11 @@ Qonversion; what's missing is the account setup:
 
 ## 6. Data migration & security follow-ups
 
-- [ ] **Confirm `migratePrivatePostMedia` has actually been run against production data.** There's
-      a known, deliberate gap in Storage rules for posts uploaded before that migration existed —
-      their media stays reachable by anyone with the file URL, even if the post is set to
-      private, until that migration moves them to the new path. If you're not sure it's been run,
-      run it once (there's an admin-only callable for it) and spot-check a private post's media
-      URL isn't publicly fetchable afterward.
+- [ ] **Confirm `migratePrivatePostMedia` has actually been run against production data.** As of
+      H2 (2026-09-18 AEST) the legacy flat Storage path is owner-read / write-denied (no longer
+      world-readable), but public legacy objects and any still-unmigrated private/flagged media
+      should still be moved to `posts/{uid}/{postId}/...` via the admin-only callable, then
+      legacy reads fully denied (`allow read: if false`) in a follow-up. Spot-check after running.
 - [ ] **Turn on 2FA** on the Google account listed in `ADMIN_EMAILS` — that one email address is
       currently the entire authorization boundary for refund approval, prize payouts, and account
       deletion. No code change needed, just enable it on that account directly.

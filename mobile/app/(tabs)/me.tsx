@@ -235,12 +235,13 @@ export default function MeScreen() {
         const task = uploadBytesResumable(storageRef, blob, { contentType });
         task.on("state_changed", undefined, reject, () => resolve());
       });
-      const mediaUrl = await getDownloadURL(storageRef);
-
+      // No getDownloadURL()/mediaUrl here on purpose: that mints a Firebase Storage download
+      // token that keeps working forever for anyone who has it, bypassing storage.rules even if
+      // this post is later made private or gets moderation-flagged. Readers fetch media through
+      // mediaPath (usePostMediaUrl/useResizedImageUrl) instead.
       await setDoc(postRef, {
         type: mediaAsset.type,
         title: mediaTitle || null,
-        mediaUrl,
         mediaPath: path,
         visibility: mediaPublic ? "public" : "private",
         ownerId: user.uid,

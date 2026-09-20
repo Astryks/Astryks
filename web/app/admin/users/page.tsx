@@ -10,6 +10,7 @@ const deleteUserAccountFn = httpsCallable(functions, "deleteUserAccount");
 const backfillPostVisibilityFn = httpsCallable(functions, "backfillPostVisibility");
 const migratePrivatePostMediaFn = httpsCallable(functions, "migratePrivatePostMedia");
 const listAllUsersFn = httpsCallable(functions, "listAllUsers");
+const grantAdminClaimFn = httpsCallable(functions, "grantAdminClaim");
 
 type ListedUser = {
   uid: string;
@@ -32,6 +33,9 @@ export default function AdminUsersPage() {
   const [mediaMigrateResult, setMediaMigrateResult] = useState<string | null>(null);
   const [allUsers, setAllUsers] = useState<ListedUser[] | null>(null);
   const [usersError, setUsersError] = useState<string | null>(null);
+  const [grantEmail, setGrantEmail] = useState("");
+  const [grantLoading, setGrantLoading] = useState(false);
+  const [grantResult, setGrantResult] = useState<string | null>(null);
 
   const isAdminUser = isAdmin(user?.email);
 
@@ -110,6 +114,25 @@ export default function AdminUsersPage() {
       setMediaMigrateResult(err.message ?? "Couldn't run that.");
     } finally {
       setMediaMigrateLoading(false);
+    }
+  }
+
+  async function handleGrantAdmin(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = grantEmail.trim();
+    if (!trimmed) return;
+    setGrantLoading(true);
+    setGrantResult(null);
+    try {
+      await grantAdminClaimFn({ email: trimmed });
+      setGrantResult(
+        `Granted admin access to ${trimmed}. They'll need to sign out and back in (or wait up to an hour) for it to take effect.`
+      );
+      setGrantEmail("");
+    } catch (err: any) {
+      setGrantResult(err.message ?? "Couldn't grant that.");
+    } finally {
+      setGrantLoading(false);
     }
   }
 
@@ -221,6 +244,34 @@ export default function AdminUsersPage() {
         >
           {mediaMigrateLoading ? "Running…" : "Move private posts' media"}
         </button>
+      </div>
+
+      <div className="mt-8 pt-6 border-t border-ink/10">
+        <h2 className="font-display text-lg font-semibold mb-2">Grant admin access</h2>
+        <p className="text-sm text-ink/60 mb-4">
+          Sets the <code className="text-xs">admin</code> custom claim on an account, so admin checks no longer
+          depend only on the hardcoded ADMIN_EMAILS list in functions/index.js. You have to already be an admin
+          yourself to use this. The account being granted access needs to sign out and back in (or wait up to an
+          hour) before the new permission takes effect.
+        </p>
+        <form onSubmit={handleGrantAdmin} className="space-y-3">
+          <input
+            className="input"
+            type="email"
+            placeholder="teammate@email.com"
+            value={grantEmail}
+            onChange={(e) => setGrantEmail(e.target.value)}
+            required
+          />
+          {grantResult && <p className="text-sm text-ink/70">{grantResult}</p>}
+          <button
+            type="submit"
+            disabled={grantLoading || !grantEmail.trim()}
+            className="btn-secondary text-sm px-4 py-2 disabled:opacity-50"
+          >
+            {grantLoading ? "Granting…" : "Grant admin access"}
+          </button>
+        </form>
       </div>
     </div>
   );
