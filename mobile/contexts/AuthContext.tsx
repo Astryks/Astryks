@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { onAuthStateChanged, signInAnonymously, User } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase";
@@ -21,6 +21,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
+      // Apple Guideline 5.1.1(v): the app cannot require account registration before letting
+      // someone browse, post, or buy a subscription. A manual "Continue without an account" link
+      // on the login screen technically satisfied this, but two separate App Review passes still
+      // rejected the app for "requiring registration" — the link was easy to miss on a screen
+      // that otherwise looks like a normal, expected login wall, and nothing in the review
+      // process forces a reviewer to scroll past the fold to find an opt-out. Signing in
+      // anonymously automatically, with no screen or tap required, removes any wall to miss in
+      // the first place: every fresh install lands straight in the app, fully functional
+      // (browsing, posting, subscribing) under a temporary account, and creating a real
+      // email/password account remains entirely optional (see app/signup.tsx's isSavingGuestAccount
+      // path, offered from the Me tab) for anyone who wants their content to survive a reinstall.
+      if (!u) {
+        signInAnonymously(auth).catch(() => {
+          // Network hiccup or Anonymous sign-in disabled — fall through with user staying null;
+          // app/index.tsx's existing fallback still sends them to /login in that case.
+          setLoading(false);
+        });
+        return;
+      }
       setUser(u);
       setLoading(false);
       // Keep a searchable/public-readable copy of the basics on the users doc, so other

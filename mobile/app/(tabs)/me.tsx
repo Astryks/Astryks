@@ -419,7 +419,7 @@ export default function MeScreen() {
       {user.isAnonymous && (
         <TouchableOpacity
           onPress={() => router.push("/signup")}
-          style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.sectionLavender, borderRadius: 12, padding: 14, marginBottom: 16 }}
+          style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.sectionLavender, borderRadius: 12, padding: 14, marginBottom: 10 }}
         >
           <Text style={{ fontSize: 20 }}>💾</Text>
           <View style={{ flex: 1 }}>
@@ -429,6 +429,21 @@ export default function MeScreen() {
             </Text>
           </View>
           <Text style={{ color: colors.muted, fontSize: 18 }}>›</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Since signing in now happens automatically and anonymously (see AuthContext.tsx), the
+          old /login screen is no longer reached through normal app navigation at all — this is
+          the only way left for someone who already has a real Astryks account (e.g. reinstalling,
+          or switching devices) to sign into it instead of starting a brand-new guest one. */}
+      {user.isAnonymous && (
+        <TouchableOpacity
+          onPress={() => router.push("/login")}
+          style={{ marginBottom: 16 }}
+        >
+          <Text style={{ fontSize: 14, color: colors.muted, textDecorationLine: "underline" }}>
+            Already have an account? Log in
+          </Text>
         </TouchableOpacity>
       )}
 
