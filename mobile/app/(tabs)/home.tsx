@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { collection, getDocs, query, where, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { db, storage, functions } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -225,12 +225,13 @@ export default function HomeScreen() {
       await new Promise<void>((resolve, reject) => {
         task.on("state_changed", undefined, reject, () => resolve());
       });
-      const mediaUrl = await getDownloadURL(storageRef);
-
+      // No getDownloadURL()/mediaUrl here on purpose: that mints a Firebase Storage download
+      // token that keeps working forever for anyone who has it, bypassing storage.rules even if
+      // this post is later made private or gets moderation-flagged. Readers fetch media through
+      // mediaPath (usePostMediaUrl/useResizedImageUrl) instead.
       await setDoc(postRef, {
         type,
         title: captionInput.trim() || null,
-        mediaUrl,
         mediaPath: path,
         visibility: isPublic ? "public" : "private",
         ownerId: user.uid,

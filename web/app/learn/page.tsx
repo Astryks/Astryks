@@ -167,11 +167,15 @@ function LearnPageContent() {
     const opening = playingId !== lessonId;
     setPlayingId((prev) => (prev === lessonId ? null : lessonId));
 
-    // The actual video credentials aren't in the lesson doc anymore (see functions/index.js —
-    // moving them out of the publicly-readable lessons collection is what makes this
-    // subscription/preview check actually mean something, instead of the paywall being purely
-    // cosmetic). Fetch them from the gated callable each time a lesson is opened.
-    if (opening && !playback[lessonId]) {
+    // Playback credentials no longer live on the public lessons doc (see functions/index.js) —
+    // fetch them from the gated callable each time a lesson is opened. This is a real permission
+    // re-check, not just a cache warm-up: it's what stops someone from watching for free forever
+    // by opening a lesson once (while they still had preview time), then closing and reopening
+    // that same lesson after their subject's 10 minutes ran out. A `!playback[lessonId]` guard
+    // here used to skip this call entirely once a lesson had been fetched once, so a lesson
+    // opened before the cap was hit would keep playing on every later reopen with no server
+    // check at all — mobile's learn.tsx never had that guard.
+    if (opening) {
       setPlaybackLoading(lessonId);
       setPlaybackError((prev) => ({ ...prev, [lessonId]: null }));
       try {
@@ -189,6 +193,7 @@ function LearnPageContent() {
           setPreviewRemainingBySubject((prev) => ({ ...prev, [data.subjectId as string]: data.freePreviewSecondsRemaining as number }));
         }
       } catch (err: any) {
+        setPlayingId(null);
         setPlayback((prev) => ({ ...prev, [lessonId]: null }));
         if (err?.code === "functions/permission-denied" && activeSubject) {
           setPreviewRemainingBySubject((prev) => ({ ...prev, [activeSubject.id]: 0 }));

@@ -28,7 +28,7 @@ service cloud.firestore {
         || (get(path).data.visibility != 'private' && get(path).data.moderationStatus != 'flagged')
         || (request.auth != null && (
               request.auth.uid == get(path).data.ownerId ||
-              (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true)
+              (request.auth.token.admin == true || (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true))
             ));
     }
 
@@ -86,7 +86,7 @@ service cloud.firestore {
         || (resource.data.visibility != 'private' && resource.data.moderationStatus != 'flagged')
         || (request.auth != null && (
           request.auth.uid == resource.data.ownerId ||
-          (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true)
+          (request.auth.token.admin == true || (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true))
         ));
 
       // likeCount/commentCount must start at 0 (or be omitted) — without this, the *update*
@@ -101,7 +101,13 @@ service cloud.firestore {
         // Same reasoning as likeCount/commentCount above, applied to hallOfFame: without this, a
         // brand-new post could just be created with hallOfFame: true already set, skipping the
         // whole point of it being an admin-curated (or automatic top-5) honor.
-        && (!('hallOfFame' in request.resource.data) || request.resource.data.hallOfFame == false);
+        && (!('hallOfFame' in request.resource.data) || request.resource.data.hallOfFame == false)
+        // No client upload path ever sets these — user post video ever renders via the plain
+        // <video src=mediaUrl/mediaPath> element, not a Bunny embed. Without this, any post owner
+        // could set their own post's bunnyVideoId/bunnyLibraryId directly from the client and get
+        // PostCard to render an unsigned Bunny iframe embed for arbitrary IDs.
+        && !('bunnyVideoId' in request.resource.data)
+        && !('bunnyLibraryId' in request.resource.data);
 
       // Was also carve-out-able by ANY signed-in user via hasOnly(['likeCount']) /
       // hasOnly(['commentCount']) — that let anyone set a post's likeCount/commentCount to
@@ -129,7 +135,8 @@ service cloud.firestore {
         && request.resource.data.ownerId == resource.data.ownerId
         && !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['likeCount', 'commentCount', 'moderationStatus', 'moderationFlags',
-            'hallOfFame', 'hallOfFameSource', 'hallOfFameMonth', 'hallOfFameAddedAt']);
+            'hallOfFame', 'hallOfFameSource', 'hallOfFameMonth', 'hallOfFameAddedAt',
+            'bunnyVideoId', 'bunnyLibraryId']);
 
       allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
 
@@ -193,10 +200,10 @@ service cloud.firestore {
       allow update: if request.auth != null && (
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount'])
           && request.resource.data.viewCount == resource.data.get('viewCount', 0) + 1) ||
-        (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true)
+        (request.auth.token.admin == true || (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true))
       );
       allow create, delete: if request.auth != null
-        && (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true);
+        && (request.auth.token.admin == true || (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true));
     }
 
     // Lesson playback credentials (bunnyVideoId/bunnyLibraryId) — never readable directly by a
@@ -219,7 +226,7 @@ service cloud.firestore {
     match /trailers/{trailerId} {
       allow read: if true;
       allow create, update, delete: if request.auth != null
-        && (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true);
+        && (request.auth.token.admin == true || (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true));
     }
 
     // Records that getLessonPlayback actually granted this account access to a given lesson —
@@ -244,7 +251,14 @@ service cloud.firestore {
     // Follow graph
     match /follows/{followId} {
       allow read: if true;
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.followerId;
+      // Was missing both a self-follow ban and a block check, unlike likes/comments which
+      // already had both — this let someone follow themselves (inflating their own follower
+      // count for free, same shape of bug as the like-your-own-post one below) or follow someone
+      // who'd blocked them (or vice versa) by writing this doc directly, since FollowButton.tsx
+      // never goes through a callable.
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.followerId
+        && request.resource.data.followerId != request.resource.data.followingId
+        && !isBlockedPair(request.resource.data.followerId, request.resource.data.followingId);
       allow delete: if request.auth != null && request.auth.uid == resource.data.followerId;
     }
 

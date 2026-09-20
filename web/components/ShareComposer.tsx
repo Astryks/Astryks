@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable } from "firebase/storage";
 import { collection, addDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { storage, db, functions } from "@/lib/firebase";
@@ -70,12 +70,14 @@ export default function ShareComposer({ onPosted }: { onPosted?: () => void }) {
         const task = uploadBytesResumable(storageRef, file);
         task.on("state_changed", undefined, reject, () => resolve());
       });
-      const mediaUrl = await getDownloadURL(storageRef);
-
+      // No getDownloadURL()/mediaUrl here on purpose: that mints a Firebase Storage download
+      // token that keeps working forever for anyone who has it, completely bypassing
+      // storage.rules — including if this post is later made private or gets moderation-flagged.
+      // Every reader (PostCard, the post detail page, etc.) fetches media through mediaPath via
+      // usePostMediaUrl/useResizedImageUrl instead, which re-checks storage.rules on every view.
       await setDoc(postRef, {
         type,
         title: title || null,
-        mediaUrl,
         mediaPath: path,
         visibility: isPublic ? "public" : "private",
         ownerId: user.uid,

@@ -30,23 +30,29 @@ service firebase.storage {
     match /posts/{userId}/{postId}/{fileName} {
       allow read: if (request.auth != null && (
             request.auth.uid == userId ||
-            (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true)
+            (request.auth.token.admin == true || (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true))
           )) || !postIsHidden(postId);
       allow write: if request.auth != null && request.auth.uid == userId
         && request.resource.size < 200 * 1024 * 1024
         && request.resource.contentType.matches('image/.*|video/.*');
     }
 
-    // Legacy flat path, from before post media carried the post's own ID above — kept public
-    // since Storage has no way to look up which post one of these files belongs to, so its
-    // visibility can't be checked here. migratePrivatePostMedia in functions/index.js is a
-    // one-time admin cleanup that moves any already-private post's file onto the new path
-    // instead, after which nothing should be writing to this old layout anymore.
+    // Legacy flat path, from before post media carried the post's own ID above. Storage has
+    // no postId here to run postIsHidden, so we cannot mirror the visibility-aware rules on
+    // the postId-scoped layout above. Every client (ShareComposer.tsx/home.tsx/me.tsx, web +
+    // mobile) already writes to that layout instead, and both migratePrivatePostMedia (bulk)
+    // and securePostMediaOnHide (per-post, on every write) in functions/index.js move any post
+    // that goes private/flagged off this layout automatically — so nothing legitimate should
+    // ever write here again. Denying writes closes off the flat layout as an evasion route
+    // (e.g. a client that deliberately omits postId to dodge postIsHidden).
+    //
+    // H2 (2026-09-18): closed world-read to owner-only so anonymous/cross-user clients cannot
+    // exfiltrate private/flagged media still sitting on this path; owners can still load their
+    // own files during migration. After migratePrivatePostMedia empties legacy, prefer
+    // `allow read: if false` in a follow-up.
     match /posts/{userId}/{fileName} {
-      allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == userId
-        && request.resource.size < 200 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*|video/.*');
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
     }
 
     match /avatars/{userId}/{fileName} {

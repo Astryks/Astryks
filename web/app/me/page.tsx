@@ -221,12 +221,13 @@ export default function MePage() {
         const task = uploadBytesResumable(storageRef, mediaFile);
         task.on("state_changed", undefined, reject, () => resolve());
       });
-      const mediaUrl = await getDownloadURL(storageRef);
-
+      // No getDownloadURL()/mediaUrl here on purpose: that mints a Firebase Storage download
+      // token that keeps working forever for anyone who has it, bypassing storage.rules even if
+      // this post is later made private or gets moderation-flagged. Readers fetch media through
+      // mediaPath (PostThumb's useResizedImageUrl / usePostMediaUrl) instead.
       await setDoc(postRef, {
         type,
         title: mediaTitle || null,
-        mediaUrl,
         mediaPath: path,
         visibility: mediaPublic ? "public" : "private",
         ownerId: user.uid,
