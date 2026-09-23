@@ -19,6 +19,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/videos-for-kids",
     "/creative-learning-for-kids",
     "/art-and-music-for-kids",
+    "/everyone-should-make-art",
+    "/everyone-should-make-music",
+    "/inspiration-can-strike-anywhere",
   ];
   const comingSoonHubs = [
     "/investing-for-kids",

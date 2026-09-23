@@ -379,6 +379,10 @@ export default function Home() {
           <Link href="/learn-art" className="hover:text-ink/70 hover:underline">Learn art</Link>
           {" · "}
           <Link href="/learn-music" className="hover:text-ink/70 hover:underline">Learn music</Link>
+          {" · "}
+          <Link href="/everyone-should-make-art" className="hover:text-ink/70 hover:underline">Make art</Link>
+          {" · "}
+          <Link href="/everyone-should-make-music" className="hover:text-ink/70 hover:underline">Make music</Link>
         </p>
         <p className="mt-1">
           <a href="mailto:support@astryks.com" className="hover:text-ink/70 hover:underline">support@astryks.com</a>
