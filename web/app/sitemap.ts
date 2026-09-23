@@ -22,6 +22,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/everyone-should-make-art",
     "/everyone-should-make-music",
     "/inspiration-can-strike-anywhere",
+    "/just-start",
   ];
   const comingSoonHubs = [
     "/investing-for-kids",
