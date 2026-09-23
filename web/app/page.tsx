@@ -373,6 +373,12 @@ export default function Home() {
           <Link href="/terms" className="hover:text-ink/70 hover:underline">Terms</Link>
           {" · "}
           <Link href="/support" className="hover:text-ink/70 hover:underline">Support</Link>
+          {" · "}
+          <Link href="/edtech" className="hover:text-ink/70 hover:underline">Edtech</Link>
+          {" · "}
+          <Link href="/learn-art" className="hover:text-ink/70 hover:underline">Learn art</Link>
+          {" · "}
+          <Link href="/learn-music" className="hover:text-ink/70 hover:underline">Learn music</Link>
         </p>
         <p className="mt-1">
           <a href="mailto:support@astryks.com" className="hover:text-ink/70 hover:underline">support@astryks.com</a>
