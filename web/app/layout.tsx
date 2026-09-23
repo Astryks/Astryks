@@ -18,6 +18,9 @@ const DESCRIPTION = "Learn real skills. Post your own work. Grow together.";
 // with no image or description — this is what makes a shared link actually look like a real
 // product instead of a raw URL.
 export const metadata: Metadata = {
+  verification: {
+    google: "7MpmaiUsaL_kA608zKEsauFVru7dYHB4jS_sqiStTWo",
+  },
   metadataBase: new URL("https://astryks.com"),
   title: { default: "Astryks", template: "%s | Astryks" },
   description: DESCRIPTION,
