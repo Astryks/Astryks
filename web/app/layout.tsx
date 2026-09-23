@@ -20,6 +20,9 @@ const DESCRIPTION = "Learn real skills. Post your own work. Grow together.";
 export const metadata: Metadata = {
   verification: {
     google: "7MpmaiUsaL_kA608zKEsauFVru7dYHB4jS_sqiStTWo",
+    other: {
+      "msvalidate.01": "18A92013B82E3924FD7EBA39BF31DDA",
+    },
   },
   metadataBase: new URL("https://astryks.com"),
   title: { default: "Astryks", template: "%s | Astryks" },
