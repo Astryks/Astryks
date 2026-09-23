@@ -13,6 +13,7 @@ export const ESSAY_HUB_LINKS: HubLink[] = [
   { href: "/everyone-should-make-art", label: "Everyone should make art" },
   { href: "/everyone-should-make-music", label: "Everyone should make music" },
   { href: "/inspiration-can-strike-anywhere", label: "Inspiration can strike anywhere" },
+  { href: "/just-start", label: "Just start" },
 ];
 
 export const COMING_SOON_HUB_LINKS: HubLink[] = [
