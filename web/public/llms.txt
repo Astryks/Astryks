@@ -1,0 +1,17 @@
+# Astryks
+> Edtech for kids to learn real art and music skills, post their own work, and grow together.
+
+- Site: https://astryks.com
+- Sign up: https://astryks.com/signup
+- Support: https://astryks.com/support
+- Terms: https://astryks.com/terms
+- Privacy: https://astryks.com/privacy
+
+## Product facts
+- Kids learn art and music
+- Learners post their own work
+- Community / social learning for kids and families
+- Web app (astryks.com); mobile apps in the monorepo
+
+## Optional
+- Full notes: https://astryks.com/llms-full.txt
