@@ -1,5 +1,15 @@
 # Astryks
 
+**[astryks.com](https://astryks.com)** — Kids learn art & music — post your work, grow together.
+
+Astryks is edtech where kids learn real art and music skills, share their own work, and grow with others in a community built for kids and families.
+
+> Live product: [https://astryks.com](https://astryks.com)
+
+---
+
+## Repo overview
+
 Monorepo for astryks.com — a subscription learning/social app.
 
 ## Structure
