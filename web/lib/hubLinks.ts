@@ -9,6 +9,12 @@ export const LIVE_HUB_LINKS: HubLink[] = [
   { href: "/art-and-music-for-kids", label: "Art & music for kids" },
 ];
 
+export const ESSAY_HUB_LINKS: HubLink[] = [
+  { href: "/everyone-should-make-art", label: "Everyone should make art" },
+  { href: "/everyone-should-make-music", label: "Everyone should make music" },
+  { href: "/inspiration-can-strike-anywhere", label: "Inspiration can strike anywhere" },
+];
+
 export const COMING_SOON_HUB_LINKS: HubLink[] = [
   { href: "/investing-for-kids", label: "Investing for kids (coming soon)" },
   { href: "/finance-for-kids", label: "Finance for kids (coming soon)" },
