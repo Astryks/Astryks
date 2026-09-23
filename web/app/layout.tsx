@@ -24,6 +24,11 @@ export const metadata: Metadata = {
       "msvalidate.01": "18A92013B82E3924FD7EBA39BF31DDA",
     },
   },
+  // Keep the Bing tag in the generic metadata map as well; this is rendered
+  // directly as a named meta tag by Next.js's basic metadata renderer.
+  other: {
+    "msvalidate.01": "18A92013B82E3924FD7EBA39BF31DDA",
+  },
   metadataBase: new URL("https://astryks.com"),
   title: { default: "Astryks", template: "%s | Astryks" },
   description: DESCRIPTION,
