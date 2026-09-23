@@ -19,7 +19,7 @@ const DESCRIPTION = "Learn real skills. Post your own work. Grow together.";
 // product instead of a raw URL.
 export const metadata: Metadata = {
   metadataBase: new URL("https://astryks.com"),
-  title: "Astryks",
+  title: { default: "Astryks", template: "%s | Astryks" },
   description: DESCRIPTION,
   openGraph: {
     title: "Astryks",
@@ -48,6 +48,47 @@ export const viewport: Viewport = {
   themeColor: "#E85D5D",
 };
 
+const ORG_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Astryks",
+  url: "https://astryks.com",
+  description: DESCRIPTION,
+};
+
+const FAQ_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "What is Astryks?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Astryks is edtech where kids learn real art and music skills, post their own work, and grow together.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Who is Astryks for?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Kids and families who want structured creative learning plus a place to share work safely.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Where do I sign up?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Create an account at https://astryks.com/signup.",
+      },
+    },
+  ],
+};
+
+
+
 const fraunces = Fraunces({
   subsets: ["latin"],
   weight: ["600", "700", "900"],
@@ -66,6 +107,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${fraunces.variable} ${inter.variable}`}>
       <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_JSON_LD) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
+        />
         <ErrorReporter />
         <ReferralCapture />
         <AuthProvider>
