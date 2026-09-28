@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 const FAQS = [
   {
     q: "Do I need instruments to start making music?",
-    a: "Not necessarily. Many kids start with a laptop or iPad and free software. A microphone helps for singing, but you can begin with loops, keys on screen, and curiosity.",
+    a: "Not necessarily. Many people start with a laptop or iPad and free software. A microphone helps for singing, but you can begin with loops, keys on screen, and curiosity.",
   },
   {
     q: "What is GarageBand, and does Astryks own it?",
@@ -36,7 +36,7 @@ const FAQS = [
   },
   {
     q: "How does Astryks fit in?",
-    a: "Astryks offers expert-led music lessons for kids and families, including practical song-making, plus a place to post work. Sign up at https://astryks.com/signup or see https://astryks.com/learn-music.",
+    a: "Astryks offers expert-led music lessons for anyone, including practical song-making, plus a place to post work. Sign up at https://astryks.com/signup or see https://astryks.com/learn-music.",
   },
 ];
 
@@ -72,7 +72,7 @@ export default function EveryoneShouldMakeMusicPage() {
           <div className="max-w-2xl mx-auto space-y-5 text-ink/75 leading-relaxed">
             <p>
               Everyone should make music. Everyone should try making a song — not for fame, just to
-              finish something that came from you. Kids especially benefit from hearing their own
+              finish something that came from you. There's something special about hearing your own
               ideas turn into sound.
             </p>
             <p>
@@ -93,13 +93,13 @@ export default function EveryoneShouldMakeMusicPage() {
               <Link href="/learn-music" className="link-accent">
                 Astryks
               </Link>
-              , kids learn real music skills from practicing professionals — including creating a
+              , anyone learns real music skills from practicing professionals — including creating a
               song from scratch (GarageBand-friendly masterclass style) and singing basics — then
               can{" "}
               <Link href="/signup" className="link-accent">
                 post what they make
               </Link>{" "}
-              if they want feedback from a kids-and-families community.
+              if they want feedback from the community.
             </p>
             <p className="text-sm text-ink/55 border border-ink/10 rounded-xl bg-white/70 px-4 py-3">
               Astryks is not affiliated with Apple. GarageBand® is a trademark of Apple Inc. Use

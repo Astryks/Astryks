@@ -24,18 +24,18 @@ export const metadata: Metadata = {
 const FAQS = [
   {
     q: "What does “just start” mean on Astryks?",
-    a: "Don’t wait until you feel ready or know every rule. Begin a drawing, painting, or song — finish one small piece. Astryks offers art and music lessons for kids and families, plus a place to post work.",
+    a: "Don’t wait until you feel ready or know every rule. Begin a drawing, painting, or song — finish one small piece. Astryks offers art and music lessons for anyone, plus a place to post work.",
   },
   {
     q: "Is Astryks a film school?",
-    a: "No. Astryks is edtech for kids to learn real art and music skills. Film stories on this page are metaphors for creative courage — inspiration, not a filmmaking course.",
+    a: "No. Astryks is edtech for anyone to learn real art and music skills. Film stories on this page are metaphors for creative courage — inspiration, not a filmmaking course.",
   },
   {
     q: "Why mention Orson Welles and Quentin Tarantino?",
     a: "As encouragement: beginners sometimes try things “experts” said couldn’t be done, and many artists start by loving and studying other people’s work before finding their own voice. Astryks is not affiliated with Welles, Tarantino, or their estates.",
   },
   {
-    q: "Where do kids begin today?",
+    q: "Where do I begin today?",
     a: "Sign up free at https://astryks.com/signup, or go to https://astryks.com/learn-art and https://astryks.com/learn-music.",
   },
 ];
@@ -75,8 +75,8 @@ export default function JustStartPage() {
         <div className="px-4 md:px-10">
           <div className="max-w-2xl mx-auto space-y-5 text-ink/75 leading-relaxed">
             <p>
-              Don’t wait until you’re “ready.” Make a sketch. Hit record on a song idea. Kids and
-              families who finish one small thing learn faster than kids who wait for perfect
+              Don’t wait until you’re “ready.” Make a sketch. Hit record on a song idea. Anyone who
+              finishes one small thing learns faster than someone who waits for perfect
               conditions. That is the whole idea:{" "}
               <strong>just start</strong>.
             </p>
@@ -119,7 +119,7 @@ export default function JustStartPage() {
               Make art. Make a song. Don’t wait.
             </h2>
             <p>
-              On Astryks, kids learn real{" "}
+              On Astryks, anyone learns real{" "}
               <Link href="/learn-art" className="link-accent">
                 art
               </Link>{" "}

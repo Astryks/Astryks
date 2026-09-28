@@ -24,10 +24,10 @@ export const metadata: Metadata = {
 const FAQS = [
   {
     q: "Does everyone really need to make art?",
-    a: "You don’t need to become a professional. Making at least one piece — a drawing, painting, or sketch — helps kids (and adults) practice looking, patience, and finishing something that is theirs.",
+    a: "You don’t need to become a professional. Making at least one piece — a drawing, painting, or sketch — helps anyone practice looking, patience, and finishing something that is theirs.",
   },
   {
-    q: "Is it OK for kids to copy other artists’ work?",
+    q: "Is it OK to copy other artists’ work?",
     a: "Yes, as a learning practice — studying and copying masters the way art students have for centuries. That is different from selling or claiming someone else’s finished work as your original for sale. Copy to learn; then make your own.",
   },
   {
@@ -36,7 +36,7 @@ const FAQS = [
   },
   {
     q: "How does Astryks help?",
-    a: "Astryks offers expert-led art lessons for kids and families, plus a place to post your own work. Start free at https://astryks.com/signup or explore https://astryks.com/learn-art.",
+    a: "Astryks offers expert-led art lessons for anyone, plus a place to post your own work. Start free at https://astryks.com/signup or explore https://astryks.com/learn-art.",
   },
 ];
 
@@ -71,7 +71,7 @@ export default function EveryoneShouldMakeArtPage() {
         <div className="px-4 md:px-10">
           <div className="max-w-2xl mx-auto space-y-5 text-ink/75 leading-relaxed">
             <p>
-              Everybody should make art — at least one piece. Kids especially. You don’t need fancy
+              Everybody should make art — at least one piece. You don’t need fancy
               materials or a “talent” label. You need a blank page, a little time, and permission to
               be a beginner.
             </p>
@@ -134,7 +134,7 @@ export default function EveryoneShouldMakeArtPage() {
               <Link href="/learn-art" className="link-accent">
                 Astryks
               </Link>
-              , kids can learn real art skills from practicing professionals and{" "}
+              , anyone can learn real art skills from practicing professionals and{" "}
               <Link href="/signup" className="link-accent">
                 post their own work
               </Link>{" "}

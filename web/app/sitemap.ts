@@ -5,37 +5,30 @@ import type { MetadataRoute } from "next";
 // Bump this whenever one of the routes below meaningfully changes — a fixed date here (rather
 // than computing "now" at build time on every deploy) avoids every URL looking freshly updated
 // on every single rebuild, which search engines discount as a signal.
-const LAST_MODIFIED = new Date("2026-09-23");
+const LAST_MODIFIED = new Date("2026-09-28");
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = "https://astryks.com";
   // /prize-rules dropped — it now just redirects to / (Creative Prize retired, see functions/
   // index.js) and a defunct sweepstakes-rules page has no reason to stay indexed.
   const core = ["", "/login", "/signup", "/terms", "/privacy", "/support"];
-  const liveHubs = [
+  const hubs = [
     "/edtech",
     "/learn-art",
     "/learn-music",
-    "/videos-for-kids",
-    "/creative-learning-for-kids",
-    "/art-and-music-for-kids",
+    "/videos",
+    "/creative-learning",
+    "/art-and-music",
     "/everyone-should-make-art",
     "/everyone-should-make-music",
     "/inspiration-can-strike-anywhere",
     "/just-start",
   ];
-  const comingSoonHubs = [
-    "/investing-for-kids",
-    "/finance-for-kids",
-    "/how-to-invest-in-the-share-market",
-    "/how-to-build-games",
-    "/game-building-for-kids",
-  ];
-  const routes = [...core, ...liveHubs, ...comingSoonHubs];
+  const routes = [...core, ...hubs];
   return routes.map((route) => ({
     url: `${base}${route}`,
     lastModified: LAST_MODIFIED,
     changeFrequency: route === "" ? "weekly" : "monthly",
-    priority: route === "" ? 1 : liveHubs.includes(route) ? 0.7 : 0.5,
+    priority: route === "" ? 1 : hubs.includes(route) ? 0.7 : 0.5,
   }));
 }

@@ -30,7 +30,10 @@ export const metadata: Metadata = {
     "msvalidate.01": "18A92013B82BE3924FD7EBA39BF31DDA",
   },
   metadataBase: new URL("https://astryks.com"),
-  title: { default: "Astryks", template: "%s | Astryks" },
+  title: {
+    default: "Astryks — Learn Music & Art from Real Working Professionals",
+    template: "%s | Astryks",
+  },
   description: DESCRIPTION,
   openGraph: {
     title: "Astryks",
@@ -76,7 +79,7 @@ const FAQ_JSON_LD = {
       name: "What is Astryks?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Astryks is edtech where kids learn real art and music skills, post their own work, and grow together.",
+        text: "Astryks is a place for anyone to learn real art and music skills, post their own work, and grow together.",
       },
     },
     {
@@ -84,7 +87,7 @@ const FAQ_JSON_LD = {
       name: "Who is Astryks for?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Kids and families who want structured creative learning plus a place to share work safely.",
+        text: "Anyone who wants to learn real life skills from working professionals and share what they create.",
       },
     },
     {
