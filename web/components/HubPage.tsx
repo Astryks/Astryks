@@ -11,9 +11,6 @@ type HubPageProps = {
   faqs: HubFaq[];
   related: HubLink[];
   ctaLabel?: string;
-  /** When true: coming-soon topic — CTA still goes to signup for live art/music today */
-  comingSoon?: boolean;
-  comingSoonNote?: string;
 };
 
 export function faqJsonLd(faqs: HubFaq[]) {
@@ -36,58 +33,36 @@ export default function HubPage({
   faqs,
   related,
   ctaLabel = "Create a free account →",
-  comingSoon = false,
-  comingSoonNote,
 }: HubPageProps) {
   return (
     <div className="pb-16">
       <div className="px-4 py-12 md:py-20 text-center">
         <div className="max-w-2xl mx-auto">
           <p className="text-xs font-semibold tracking-wide uppercase text-ink/50 mb-3">{eyebrow}</p>
-          {comingSoon && (
-            <p className="inline-block mb-4 rounded-full bg-highlight/40 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink">
-              Coming soon — not a live course yet
-            </p>
-          )}
           <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-black tracking-tight mb-5 leading-[1.15]">
             {h1}
           </h1>
           <p className="text-ink/60 max-w-lg mx-auto mb-6 md:text-lg">{lead}</p>
-          {comingSoon && comingSoonNote && (
-            <p className="text-ink/70 max-w-lg mx-auto mb-8 text-sm leading-relaxed border border-ink/10 rounded-xl bg-white/70 px-4 py-3">
-              {comingSoonNote}
-            </p>
-          )}
           <Link href="/signup" className="btn-primary inline-flex">
-            {comingSoon ? "Learn art & music on Astryks today →" : ctaLabel}
+            {ctaLabel}
           </Link>
           <p className="text-ink/40 text-xs mt-3">
-            {comingSoon
-              ? "Art and music lessons are live now · free to join and post · 10 min free preview"
-              : "Free to join and post · 10 min free lesson preview · cancel anytime"}
+            Free to join and post · 10 min free lesson preview · cancel anytime
           </p>
         </div>
       </div>
 
-      <div className={`px-4 md:px-10 py-12 md:py-16 ${comingSoon ? "bg-sectionLavender" : "bg-sectionMint"}`}>
+      <div className="px-4 md:px-10 py-12 md:py-16 bg-sectionMint">
         <div className="max-w-2xl mx-auto">
-          <h2 className="font-display text-2xl md:text-3xl font-bold mb-4">
-            {comingSoon ? "What Astryks offers today" : "What Astryks is"}
-          </h2>
+          <h2 className="font-display text-2xl md:text-3xl font-bold mb-4">What Astryks is</h2>
           <p className="text-ink/70 mb-6 leading-relaxed">
-            Astryks is edtech where kids learn <strong>real art and music</strong> skills from
-            practicing professionals, post their own work, and grow together with other kids and
-            families. Web app at{" "}
+            Astryks is a place for anyone to learn <strong>real art and music</strong> skills from
+            practicing professionals, post their own work, and grow together with the community.
+            Web app at{" "}
             <Link href="/" className="link-accent">
               astryks.com
             </Link>
             ; mobile apps share the same account.
-            {comingSoon && (
-              <>
-                {" "}
-                Investing, share-market, and game-building lessons are <strong>planned — not available to buy or watch yet</strong>.
-              </>
-            )}
           </p>
           <ul className="space-y-3 text-ink/70">
             {bullets.map((b) => (
@@ -99,7 +74,7 @@ export default function HubPage({
           </ul>
           <div className="mt-8">
             <Link href="/signup" className="btn-primary inline-flex">
-              {comingSoon ? "Start with art & music →" : "Get started →"}
+              Get started →
             </Link>
           </div>
         </div>

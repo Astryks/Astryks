@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import HubPage, { faqJsonLd } from "@/components/HubPage";
 import { LIVE_HUB_LINKS } from "@/lib/hubLinks";
 
-const TITLE = "Learn music for kids — create songs & sing";
+const TITLE = "Learn music — create songs & sing";
 const DESCRIPTION =
-  "Learn music on Astryks: kids practice real music skills with expert lessons, create songs, and post their work. Free to join.";
+  "Learn music on Astryks: practice real music skills with expert lessons, create songs, and post your work. Free to join.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -22,15 +22,15 @@ export const metadata: Metadata = {
 
 const FAQS = [
   {
-    q: "What music skills can kids learn on Astryks?",
-    a: "Kids can learn to create songs (including with tools like GarageBand), basics of singing, and other practical music skills taught by professionals who make music for a living.",
+    q: "What music skills can I learn on Astryks?",
+    a: "You can learn to create songs (including with tools like GarageBand), basics of singing, and other practical music skills taught by professionals who make music for a living.",
   },
   {
     q: "Is this for complete beginners?",
     a: "Yes. Start with zero experience — learn techniques, listen to work you admire, and make your first song or vocal piece at your own pace.",
   },
   {
-    q: "Can kids share the music they make?",
+    q: "Can I share the music I make?",
     a: "Yes. Posting is free and optional. Share for feedback or keep experiments private.",
   },
   {
@@ -48,8 +48,8 @@ export default function LearnMusicHubPage() {
       />
       <HubPage
         eyebrow="Learning music"
-        h1="Learn music for kids — make real songs and grow your ear"
-        lead="Astryks teaches kids practical music skills from working musicians — then gives them a place to post what they make."
+        h1="Learn music for anyone — make real songs and grow your ear"
+        lead="Astryks teaches practical music skills from working musicians — then gives you a place to post what you make."
         bullets={[
           "Create songs from scratch and learn singing basics",
           "Lessons from practicing music professionals",

@@ -1,8 +1,8 @@
 # Astryks
 
-**[astryks.com](https://astryks.com)** — Kids learn art & music — post your work, grow together.
+**[astryks.com](https://astryks.com)** — Learn art & music — post your work, grow together.
 
-Astryks is edtech where kids learn real art and music skills, share their own work, and grow with others in a community built for kids and families.
+Astryks is edtech where anyone can learn real art and music skills, share their own work, and grow with others in a community.
 
 > Live product: [https://astryks.com](https://astryks.com)
 

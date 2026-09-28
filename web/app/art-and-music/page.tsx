@@ -2,18 +2,18 @@ import type { Metadata } from "next";
 import HubPage, { faqJsonLd } from "@/components/HubPage";
 import { LIVE_HUB_LINKS } from "@/lib/hubLinks";
 
-const TITLE = "Art and music for kids — learn & create on Astryks";
+const TITLE = "Art and music — learn & create on Astryks";
 const DESCRIPTION =
-  "Art and music for kids on Astryks: expert lessons, free community posting, and creative growth for families.";
+  "Art and music on Astryks: expert lessons, free community posting, and creative growth for anyone who wants to make things.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  alternates: { canonical: "https://astryks.com/art-and-music-for-kids" },
+  alternates: { canonical: "https://astryks.com/art-and-music" },
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
-    url: "https://astryks.com/art-and-music-for-kids",
+    url: "https://astryks.com/art-and-music",
     siteName: "Astryks",
     type: "website",
   },
@@ -26,15 +26,15 @@ const FAQS = [
     a: "Yes. Live subjects today are art and music, with new lessons added regularly under one subscription.",
   },
   {
-    q: "Can one family account do both?",
+    q: "Can one account do both?",
     a: "Yes — full access to Music and Art is included when you subscribe. Posting and community features are free with an account.",
   },
   {
     q: "Are there other subjects?",
-    a: "Art and music are live. Topics like investing or game building may come later and are marked coming soon on their hub pages — they are not available yet.",
+    a: "Art and music are live today, with more subjects planned as the library grows.",
   },
   {
-    q: "Where do kids start?",
+    q: "Where do I start?",
     a: "https://astryks.com/signup — then try the free lesson preview.",
   },
 ];
@@ -48,8 +48,8 @@ export default function ArtAndMusicHubPage() {
       />
       <HubPage
         eyebrow="Art & music"
-        h1="Art and music for kids in one place"
-        lead="Draw, paint, sing, and make songs — Astryks combines expert lessons with a kids-and-families community for sharing work."
+        h1="Art and music for anyone, in one place"
+        lead="Draw, paint, sing, and make songs — Astryks combines expert lessons with a community for sharing work."
         bullets={[
           "Both art and music under one learning product",
           "Expert-led videos and trailers",
@@ -57,7 +57,7 @@ export default function ArtAndMusicHubPage() {
           "10-minute free preview of lessons before you subscribe",
         ]}
         faqs={FAQS}
-        related={LIVE_HUB_LINKS.filter((l) => l.href !== "/art-and-music-for-kids")}
+        related={LIVE_HUB_LINKS.filter((l) => l.href !== "/art-and-music")}
       />
     </>
   );

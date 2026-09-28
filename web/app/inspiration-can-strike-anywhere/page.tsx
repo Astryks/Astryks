@@ -27,12 +27,12 @@ const FAQS = [
     a: "Anywhere — a walk, a song on the radio, a colour outside the window, a museum visit, a boring afternoon. You don’t need a perfect studio for a first sketch or a first song idea.",
   },
   {
-    q: "What should kids do when inspiration hits?",
+    q: "What should I do when inspiration hits?",
     a: "Capture it quickly: a quick sketch, a voice memo, a few notes. Then finish one small piece. Starting and finishing matter more than waiting for the “perfect” idea.",
   },
   {
     q: "How can Astryks help?",
-    a: "Astryks gives kids structured art and music lessons plus a place to post work. Sign up free at https://astryks.com/signup.",
+    a: "Astryks gives anyone structured art and music lessons plus a place to post work. Sign up free at https://astryks.com/signup.",
   },
 ];
 
@@ -88,7 +88,7 @@ export default function InspirationCanStrikeAnywherePage() {
               <Link href="/learn-music" className="link-accent">
                 learn music
               </Link>{" "}
-              on Astryks — expert lessons for kids and families, and a community where you can post
+              on Astryks — expert lessons for anyone, and a community where you can post
               what you make.
             </p>
           </div>
