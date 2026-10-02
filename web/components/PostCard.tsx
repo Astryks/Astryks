@@ -237,8 +237,10 @@ export default function PostCard({
           <SaveButton postId={post.id} currentUserId={currentUserId} />
           <div className="ml-auto flex items-center gap-3">
             {inHallOfFame && (
-              <span className="text-xs text-ink/50" title="Featured in the Hall of Fame">
-                🏛️ Hall of Fame
+              <span className="inline-flex items-center gap-1 text-xs text-ink/50" title="Featured in the Hall of Fame">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/hall-of-fame-badge.png" alt="" className="w-4 h-4" />
+                Hall of Fame
               </span>
             )}
             <ShareMenu postId={post.id} title={post.title} />

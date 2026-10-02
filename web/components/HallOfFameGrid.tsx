@@ -72,7 +72,13 @@ export default function HallOfFameGrid() {
                 <p className="text-white/70 text-[10px]">{entry.likeCount} likes</p>
               </div>
               {entry.hallOfFameSource === "manual" && (
-                <span className="absolute top-1.5 right-1.5 text-sm" title="Team pick">🏛️</span>
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src="/hall-of-fame-badge.png"
+                  alt="Team pick"
+                  title="Team pick"
+                  className="absolute top-1.5 right-1.5 w-6 h-6"
+                />
               )}
             </Link>
           ))}
