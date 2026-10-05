@@ -1,6 +1,6 @@
 # Astryks — Status
 
-_Last updated: 2026-09-28._
+_Last updated: 2026-10-06._
 
 **Live:** [astryks.com](https://astryks.com) — Firebase App Hosting `apphosting:astryks-web`, project `astryks-5f31c`
 **Repo:** [Astryks/Astryks](https://github.com/Astryks/Astryks) · default branch `main`
