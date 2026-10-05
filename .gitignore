@@ -16,3 +16,6 @@ android/
 *.mobileprovision
 service-account.json
 run-me.sh
+
+# Paid Ecommerce Equation captions stay off the public repo
+docs/ecommerce-equation/transcripts/
