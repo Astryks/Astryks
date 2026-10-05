@@ -1,6 +1,6 @@
 # Astryks — Status
 
-_Last updated: 2026-09-28._
+_Last updated: 2026-10-06._
 
 **Live:** [astryks.com](https://astryks.com) — Firebase App Hosting `apphosting:astryks-web`, project `astryks-5f31c`
 **Repo:** [Astryks/Astryks](https://github.com/Astryks/Astryks) · default branch `main`
@@ -63,15 +63,16 @@ investing, or game-dev lessons. The paid unit is a **household subscription**.
 
 ### Research status
 
-- **Reviewed:** High Conversion Website, Irresistible Offer, Audience Growth Engine, Customer Nurture,
-  Performance Creative Uplift, SEO and Brand Bootcamps, $100M Meta Framework, Meta Refresh, Scale
-  Challenge, Equation Evaluation, Strategy Suite, Promotional Rhythm, TikTok Jumpstart/Bootcamp,
-  Pinterest, Productivity Boost, Roadshow 2026, all 22 Hot Seats, the Google Ads Onramp outcomes, and
-  the Google community page. Lessons with no captions are logged as metadata-only.
-- **Still open:** later parts of 7 Figure Sale Strategy, the 2025 International Expansion archive,
-  the EU course, the weekly-session archive, and the Community feed (~12.9k posts). The classroom
-  inventory (`/workspace/reports/ecommerce-equation-classroom-inventory.md`) hasn't arrived yet and
-  will be merged when it does. Open research doesn't block the Day-1 work.
+- **Classroom catalog (2026-10-06):** all **33** collections and **1,115** lessons indexed in
+  [`docs/ecommerce-equation/classroom-inventory.md`](docs/ecommerce-equation/classroom-inventory.md).
+  Of 1,004 videos, **683** have captions (studied privately; caption files are gitignored), **321**
+  are CAPTIONLESS (metadata/resources only), **111** are text/resource pages with no video.
+- **Community sample:** 540 posts (60 newest in each of 9 categories) in
+  [`docs/ecommerce-equation/community.md`](docs/ecommerce-equation/community.md). Full feed is ~12.9k
+  posts; older GENERAL/META threads and comment replies are still open.
+- **Still open:** deeper community pass, comment threads, downloading named workbooks, and any
+  slide/OCR read of captionless videos. Open research does not block Day-1 commercial-truth work.
+- Full playbook: [`docs/marketing-roadmap.md`](docs/marketing-roadmap.md).
 
 ### Day-1 actions (Sid)
 
