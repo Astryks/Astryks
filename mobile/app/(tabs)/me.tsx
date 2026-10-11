@@ -32,6 +32,8 @@ import PrivacyLockSettings from "@/components/PrivacyLockSettings";
 import { useAuth } from "@/contexts/AuthContext";
 import { colors } from "@/lib/styles";
 import { guessMediaUploadInfo } from "@/lib/mediaUpload";
+import { isGuest, promptCreateAccount } from "@/lib/accountGate";
+import { findObjectionable, OBJECTIONABLE_MESSAGE } from "@/lib/contentFilter";
 
 const fetchLinkPreview = httpsCallable(functions, "fetchLinkPreview");
 const deleteMyAccount = httpsCallable(functions, "deleteMyAccount");
@@ -199,6 +201,7 @@ export default function MeScreen() {
   }, [user]);
 
   async function pickMedia() {
+    if (isGuest(user)) return promptCreateAccount("share a photo or video");
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       quality: 0.8,
@@ -215,6 +218,11 @@ export default function MeScreen() {
 
   async function handleAddMedia() {
     if (!mediaAsset || !user) return;
+    if (isGuest(user)) return promptCreateAccount("post");
+    if (findObjectionable(mediaTitle)) {
+      setMediaError(OBJECTIONABLE_MESSAGE);
+      return;
+    }
     setMediaUploading(true);
     setMediaError(null);
     try {
@@ -293,6 +301,11 @@ export default function MeScreen() {
 
   async function handleAddLink() {
     if (!linkInput.trim() || !user) return;
+    if (isGuest(user)) return promptCreateAccount("share a link");
+    if (findObjectionable(linkCaptionInput)) {
+      setLinkError(OBJECTIONABLE_MESSAGE);
+      return;
+    }
     setLinkSaving(true);
     setLinkError(null);
     try {
@@ -733,6 +746,13 @@ export default function MeScreen() {
             Support
           </Text>
         </View>
+        <Text style={{ fontSize: 15, color: colors.muted, textAlign: "center", marginTop: 10 }}>
+          Zero tolerance for objectionable content or abusive users. Report any post, comment or member with the in-app Report button, or contact us at{" "}
+          <Text style={{ textDecorationLine: "underline" }} onPress={() => Linking.openURL("mailto:support@astryks.com")}>
+            support@astryks.com
+          </Text>
+          . We act on reports within 24 hours.
+        </Text>
         <Text style={{ fontSize: 15, color: colors.muted, marginTop: 6 }}>© 2026 Astryks. All rights reserved.</Text>
       </View>
     </ScrollView>

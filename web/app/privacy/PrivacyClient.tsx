@@ -74,11 +74,9 @@ export default function PrivacyClient() {
 
       <h2 className="font-display text-lg font-semibold mt-8 mb-2">8. Children's privacy</h2>
       <p className="mb-4">
-        Astryks is intended for use by people who are at least 18, or by someone younger only together
-        with, and under the supervision of, a parent or legal guardian who is at least 18. We don't
-        knowingly collect information from a child using Astryks unaccompanied. If you believe a child
-        is using Astryks without the required parent or guardian supervision, contact us and we'll take
-        appropriate action.
+        Astryks is intended only for people who are at least 18. We don't knowingly collect information
+        from anyone under 18. If you believe someone under 18 is using Astryks, contact us at
+        support@astryks.com and we'll take appropriate action, including removing the account.
       </p>
 
       <h2 className="font-display text-lg font-semibold mt-8 mb-2">9. Cookies &amp; analytics</h2>

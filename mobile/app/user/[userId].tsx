@@ -11,6 +11,7 @@ import FollowButton from "@/components/FollowButton";
 import ReportModal from "@/components/ReportModal";
 import PersistentTabBar from "@/components/PersistentTabBar";
 import { colors } from "@/lib/styles";
+import { isGuest, promptCreateAccount } from "@/lib/accountGate";
 
 const getUserPosts = httpsCallable(functions, "getUserPosts");
 const submitReportFn = httpsCallable(functions, "submitReport");
@@ -133,6 +134,7 @@ export default function UserProfileScreen() {
 
   async function openConversation() {
     if (!currentUser || messaging || isBlockedEitherWay) return;
+    if (isGuest(currentUser)) return promptCreateAccount("send messages");
     setMessaging(true);
     try {
       const conversationId = [currentUser.uid, userId].sort().join("_");

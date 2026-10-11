@@ -19,6 +19,8 @@ import SuggestionsRow from "@/components/SuggestionsRow";
 import HallOfFameGrid from "@/components/HallOfFameGrid";
 import { colors } from "@/lib/styles";
 import { guessMediaUploadInfo } from "@/lib/mediaUpload";
+import { isGuest, promptCreateAccount } from "@/lib/accountGate";
+import { findObjectionable, OBJECTIONABLE_MESSAGE } from "@/lib/contentFilter";
 
 const fetchLinkPreview = httpsCallable(functions, "fetchLinkPreview");
 const getFeed = httpsCallable(functions, "getFeed");
@@ -180,7 +182,17 @@ export default function HomeScreen() {
     })();
   }, [scope, allPosts, user]);
 
+  // Guests (anonymous sessions) can browse but not create content — App Store Guideline 1.2.
+  function requireMember(action: string): boolean {
+    if (isGuest(user)) {
+      promptCreateAccount(action);
+      return false;
+    }
+    return true;
+  }
+
   async function pickMedia() {
+    if (!requireMember("share a photo or video")) return;
     // Was quality: 1 (uncompressed) — a modern phone photo at full quality can be 5-10MB+,
     // meaning every single photo post in the feed had to fully download that before it could
     // even display, no resizing or thumbnail anywhere in the pipeline. 0.7 matches what me.tsx
@@ -203,6 +215,11 @@ export default function HomeScreen() {
 
   async function postMedia() {
     if (!pendingMedia || !user) return;
+    if (!requireMember("post")) return;
+    if (findObjectionable(captionInput)) {
+      setComposeError(OBJECTIONABLE_MESSAGE);
+      return;
+    }
     setComposeLoading(true);
     setComposeError(null);
     try {
@@ -260,6 +277,11 @@ export default function HomeScreen() {
 
   async function shareText() {
     if (!textInput || !textInput.trim() || !user) return;
+    if (!requireMember("post")) return;
+    if (findObjectionable(textInput)) {
+      setComposeError(OBJECTIONABLE_MESSAGE);
+      return;
+    }
     setComposeLoading(true);
     setComposeError(null);
     try {
@@ -284,6 +306,11 @@ export default function HomeScreen() {
 
   async function shareLink() {
     if (!linkInput || !user) return;
+    if (!requireMember("share a link")) return;
+    if (findObjectionable(captionInput)) {
+      setComposeError(OBJECTIONABLE_MESSAGE);
+      return;
+    }
     setComposeLoading(true);
     setComposeError(null);
     try {
@@ -449,11 +476,11 @@ export default function HomeScreen() {
         <View
           style={{ flexDirection: "row", alignItems: "center", gap: 8, margin: 12, borderWidth: 1, borderColor: colors.line + "1A", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "white" }}
         >
-          <TouchableOpacity onPress={() => setTextInput("")} style={{ flex: 1 }}>
+          <TouchableOpacity onPress={() => { if (requireMember("post")) setTextInput(""); }} style={{ flex: 1 }}>
             <Text style={{ color: colors.muted, fontSize: 17 }}>Share something…</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={pickMedia}><Text style={{ fontSize: 18 }}>📷</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setLinkInput("")}><Text style={{ fontSize: 18 }}>🔗</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => { if (requireMember("share a link")) setLinkInput(""); }}><Text style={{ fontSize: 18 }}>🔗</Text></TouchableOpacity>
         </View>
       )}
 

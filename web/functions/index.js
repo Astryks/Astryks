@@ -9,6 +9,7 @@ const https = require("https");
 const http = require("http");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
+const { findObjectionable } = require("./contentFilter");
 
 // Every function below is exported from this one file, so every function's container loads the
 // combined weight of everything required anywhere in it at cold start — Stripe, nodemailer,
@@ -4316,6 +4317,21 @@ exports.moderatePostMedia = onDocumentCreated(
   }
 );
 
+// Text-side counterpart to moderatePostMedia (App Store Guideline 1.2: "a method for filtering
+// objectionable content"). A post whose title, body or link title contains objectionable language
+// is flagged the same way an explicit image is: hidden from everyone but its owner/admins and sent
+// to /admin/reports for a human decision — never silently deleted, so a false positive has
+// recourse. The mobile client pre-checks the same list (mobile/lib/contentFilter.ts) so ordinary
+// members get an instant, friendly error instead; this catches anything that bypasses the client.
+exports.moderatePostText = onDocumentCreated({ document: "posts/{postId}" }, async (event) => {
+  const post = event.data?.data();
+  if (!post) return;
+  const text = [post.title, post.body, post.linkTitle].filter((t) => typeof t === "string").join("\n");
+  if (findObjectionable(text)) {
+    await flagPostForModeration(event.params.postId, post, ["objectionable language"]);
+  }
+});
+
 // ---------- Triggers: keep posts/{postId}.likeCount in sync (Admin SDK, bypasses rules) ----------
 //
 // This is the ONLY place likeCount is ever changed server-side. It used to also be writable
@@ -4396,6 +4412,15 @@ exports.onLikeDeleted = onDocumentDeleted("posts/{postId}/likes/{userId}", async
 exports.onCommentCreated = onDocumentCreated("posts/{postId}/comments/{commentId}", async (event) => {
   const { postId } = event.params;
   const comment = event.data.data();
+  // App Store Guideline 1.2 content filter: a comment containing objectionable language is
+  // removed immediately, before it's counted or pushed to anyone. The mobile client pre-checks the
+  // same list, so this mainly catches an edited/modified client.
+  if (findObjectionable(comment.body)) {
+    await event.data.ref.delete();
+    console.warn("onCommentCreated: removed objectionable comment", postId, event.params.commentId);
+    return;
+  }
+
   const postRef = db.doc(`posts/${postId}`);
   const postSnap = await postRef.get();
   if (!postSnap.exists) return;
@@ -4453,6 +4478,14 @@ exports.onMessageCreated = onDocumentCreated(
         `Astryks support message from ${message.senderName || "a member"}`,
         `From: ${message.senderName || "Member"} (uid: ${message.senderId}, email: ${senderEmail})\n\n${message.text}\n\nReply directly to the user's email above, or from the Firebase console.`
       );
+      return;
+    }
+
+    // App Store Guideline 1.2 content filter for member-to-member messages (the support inbox
+    // above is exempt): remove the message instead of delivering it.
+    if (findObjectionable(message.text)) {
+      await event.data.ref.delete();
+      console.warn("onMessageCreated: removed objectionable message", conversationId, event.params.messageId);
       return;
     }
 

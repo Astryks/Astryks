@@ -7,6 +7,8 @@ import { db, functions } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import ReportModal from "@/components/ReportModal";
 import { colors } from "@/lib/styles";
+import { isGuest, promptCreateAccount } from "@/lib/accountGate";
+import { findObjectionable, OBJECTIONABLE_MESSAGE } from "@/lib/contentFilter";
 
 const submitReportFn = httpsCallable(functions, "submitReport");
 
@@ -22,6 +24,9 @@ export default function Comments({ postId, initialComments }: { postId: string; 
   async function handleReportComment(reason: string, details: string) {
     if (!reportingComment) return;
     await submitReportFn({ targetType: "comment", targetId: reportingComment.id, postId, reason, details });
+    // Take the reported comment out of this member's view right away rather than waiting for a
+    // moderator — App Store Guideline 1.2: users must be able to immediately remove content.
+    setComments((prev) => prev.filter((c) => c.id !== reportingComment.id));
   }
 
   // firestore.rules already lets a comment's own author delete it directly — this was just
@@ -51,6 +56,11 @@ export default function Comments({ postId, initialComments }: { postId: string; 
   async function handleSubmit() {
     if (!body.trim()) return;
     if (!user) return router.push("/login");
+    if (isGuest(user)) return promptCreateAccount("comment");
+    if (findObjectionable(body)) {
+      setPostError(OBJECTIONABLE_MESSAGE);
+      return;
+    }
     setPosting(true);
     setPostError(null);
 

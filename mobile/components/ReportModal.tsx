@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, View, Text, TouchableOpacity, TextInput, Alert } from "react-native";
+import { Modal, View, Text, TouchableOpacity, TextInput, Alert, Linking } from "react-native";
 import { colors } from "@/lib/styles";
 
 const REASONS = ["Spam", "Harassment or bullying", "Inappropriate content", "Fake account", "Other"];
@@ -49,7 +49,7 @@ export default function ReportModal({
             <>
               <Text style={{ fontSize: 19, fontWeight: "700", marginBottom: 8 }}>Report submitted</Text>
               <Text style={{ color: colors.muted, fontSize: 17, marginBottom: 16 }}>
-                Thanks — our team will take a look.
+                Thanks — our team will review it within 24 hours.
               </Text>
               <TouchableOpacity
                 onPress={handleClose}
@@ -101,6 +101,13 @@ export default function ReportModal({
                   fontSize: 17,
                 }}
               />
+              <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 6 }}>
+                We act on every report within 24 hours — removing the content and ejecting abusive accounts. You can also email{" "}
+                <Text style={{ textDecorationLine: "underline" }} onPress={() => Linking.openURL("mailto:support@astryks.com")}>
+                  support@astryks.com
+                </Text>
+                .
+              </Text>
               <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
                 <TouchableOpacity
                   onPress={handleClose}

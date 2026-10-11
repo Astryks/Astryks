@@ -5,6 +5,7 @@ import { createUserWithEmailAndPassword, updateProfile, linkWithCredential, Emai
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { styles, colors } from "@/lib/styles";
+import { findObjectionable, OBJECTIONABLE_MESSAGE } from "@/lib/contentFilter";
 
 export default function SignupScreen() {
   const [name, setName] = useState("");
@@ -25,6 +26,10 @@ export default function SignupScreen() {
       setError("Please agree to the Terms of Service and Privacy Policy to continue.");
       return;
     }
+    if (findObjectionable(name)) {
+      setError(OBJECTIONABLE_MESSAGE);
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -32,6 +37,11 @@ export default function SignupScreen() {
         ? (await linkWithCredential(auth.currentUser, EmailAuthProvider.credential(email, password))).user.uid
         : (await createUserWithEmailAndPassword(auth, email, password)).user.uid;
       await updateProfile(auth.currentUser!, { displayName: name });
+      // A guest who just linked an email/password still holds an ID token whose sign_in_provider
+      // claim says "anonymous" until it's refreshed — and firestore.rules/storage.rules block
+      // content creation for that claim (App Store Guideline 1.2). Force a refresh now so they can
+      // post immediately instead of being denied for up to an hour.
+      await auth.currentUser!.getIdToken(true);
       await setDoc(doc(db, "profiles", uid), { displayName: name, createdAt: serverTimestamp() }, { merge: true });
       // AuthContext's own onAuthStateChanged listener fires the instant the credential above
       // resolves, with the auth user's displayName still null at that point (updateProfile above
@@ -98,11 +108,11 @@ export default function SignupScreen() {
           {agreed && <Text style={{ color: "white", fontSize: 16 }}>✓</Text>}
         </View>
         <Text style={{ fontSize: 16, color: colors.muted, flex: 1, lineHeight: 17 }}>
-          I agree to Astryks's{" "}
+          I'm 18 or older and I agree to Astryks's{" "}
           <Text style={{ textDecorationLine: "underline" }} onPress={() => Linking.openURL("https://astryks.com/terms")}>
             Terms of Service
           </Text>{" "}
-          and{" "}
+          (zero tolerance for objectionable content or abusive users) and{" "}
           <Text style={{ textDecorationLine: "underline" }} onPress={() => Linking.openURL("https://astryks.com/privacy")}>
             Privacy Policy
           </Text>

@@ -10,6 +10,7 @@ import PrivacyLockScreen from "@/components/PrivacyLockScreen";
 import { colors } from "@/lib/styles";
 import { BOT_UIDS } from "@/lib/botUsers";
 import BrandMark from "@/components/BrandMark";
+import { isGuest, promptCreateAccount } from "@/lib/accountGate";
 
 const getMessageSuggestions = httpsCallable(functions, "getMessageSuggestions");
 const listPublicProfiles = httpsCallable(functions, "listPublicProfiles");
@@ -63,6 +64,7 @@ export default function MessagesScreen() {
 
   async function startConversation(otherId: string, otherName: string) {
     if (!user || starting) return;
+    if (isGuest(user)) return promptCreateAccount("send messages");
     setStarting(otherId);
     try {
       const conversationId = [user.uid, otherId].sort().join("_");

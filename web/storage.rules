@@ -32,7 +32,10 @@ service firebase.storage {
             request.auth.uid == userId ||
             (request.auth.token.admin == true || (request.auth.token.email in ['mehta.siddharth09@gmail.com'] && request.auth.token.email_verified == true))
           )) || !postIsHidden(postId);
+      // No uploads from anonymous "guest" accounts (App Store Guideline 1.2: no anonymous UGC) —
+      // mirrors the !isGuest() requirement on posts in firestore.rules.
       allow write: if request.auth != null && request.auth.uid == userId
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
         && request.resource.size < 200 * 1024 * 1024
         && request.resource.contentType.matches('image/.*|video/.*');
     }

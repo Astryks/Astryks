@@ -6,7 +6,7 @@ export default function TermsClient() {
   return (
     <div className="max-w-2xl mx-auto py-10 pb-24 px-4 text-sm text-ink/80 leading-relaxed">
       <h1 className="font-display text-3xl font-bold mb-2">Terms of Service</h1>
-      <p className="text-xs text-ink/40 mb-8">Last updated: 18 August 2026 · Effective for Astryks (the "Service"), operated by the holder of Australian Business Number (ABN) 74 309 712 800, trading as Astryks ("Astryks", "we", "us").</p>
+      <p className="text-xs text-ink/40 mb-8">Last updated: 11 October 2026 · Effective for Astryks (the "Service"), operated by the holder of Australian Business Number (ABN) 74 309 712 800, trading as Astryks ("Astryks", "we", "us").</p>
 
       <h2 className="font-display text-lg font-semibold mt-8 mb-2">1. Acceptance of these Terms</h2>
       <p className="mb-4">
@@ -17,11 +17,11 @@ export default function TermsClient() {
 
       <h2 className="font-display text-lg font-semibold mt-8 mb-2">2. Eligibility</h2>
       <p className="mb-4">
-        You must be at least 18 years old to create an account, subscribe, or post content on Astryks,
-        or, if you are under 18, you may only use Astryks together with, and under the supervision of,
-        a parent or legal guardian who is at least 18 and who agrees to these Terms on your behalf.
-        By registering, you confirm you meet this requirement and that the information you provide is
-        accurate.
+        Astryks is for adults: you must be at least 18 years old to use it. By creating an account,
+        subscribing, or posting content, you confirm you are 18 or older and that the information you
+        provide is accurate. Posting, commenting and messaging other members require a registered account
+        that has agreed to these Terms — Astryks does not allow anonymous posting. Visitors who haven't
+        registered can browse only.
       </p>
 
       <h2 className="font-display text-lg font-semibold mt-8 mb-2">3. Your account</h2>

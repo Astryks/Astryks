@@ -10,6 +10,8 @@ import PrivacyLockScreen from "@/components/PrivacyLockScreen";
 import { colors } from "@/lib/styles";
 import { BOT_UIDS } from "@/lib/botUsers";
 import BrandMark from "@/components/BrandMark";
+import { isGuest, promptCreateAccount } from "@/lib/accountGate";
+import { findObjectionable, OBJECTIONABLE_MESSAGE } from "@/lib/contentFilter";
 
 const getPublicProfile = httpsCallable(functions, "getPublicProfile");
 
@@ -68,6 +70,14 @@ export default function ChatThreadScreen() {
 
   async function handleSend() {
     if (!body.trim() || !user || isBlocked) return;
+    // Guests can only write to the Astryks Support thread (firestore.rules allows exactly that);
+    // messaging another member needs a real account (App Store Guideline 1.2). Messages to
+    // Support are exempt from the objectionable-language check.
+    const isSupportThread = String(conversationId).includes("astryks-support");
+    if (!isSupportThread) {
+      if (isGuest(user)) return promptCreateAccount("send messages");
+      if (findObjectionable(body)) return Alert.alert("Message not sent", OBJECTIONABLE_MESSAGE);
+    }
     await addDoc(collection(db, "conversations", conversationId, "messages"), {
       senderId: user.uid,
       senderName: user.displayName ?? "Member",

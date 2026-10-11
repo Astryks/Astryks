@@ -15,9 +15,11 @@ import ShareMenu from "@/components/ShareMenu";
 import { colors } from "@/lib/styles";
 import { useResizedImageUrl, usePostMediaUrl } from "@/lib/resizedImage";
 import { ADMIN_EMAILS } from "@/lib/admin";
+import { isGuest, promptCreateAccount } from "@/lib/accountGate";
 
 const deletePostFn = httpsCallable(functions, "deletePost");
 const submitReportFn = httpsCallable(functions, "submitReport");
+const blockUserFn = httpsCallable(functions, "blockUser");
 const addToHallOfFameFn = httpsCallable(functions, "addToHallOfFame");
 const removeFromHallOfFameFn = httpsCallable(functions, "removeFromHallOfFame");
 
@@ -50,8 +52,43 @@ export default function PostCard({
   const safeMediaUrl = usePostMediaUrl(post.mediaPath, post.mediaUrl ?? null);
   const displayMediaUrl = useResizedImageUrl(post.type === "photo" ? post.mediaPath : null, safeMediaUrl ?? "");
 
+  const [reported, setReported] = useState(false);
+
   async function handleReport(reason: string, details: string) {
     await submitReportFn({ targetType: "post", targetId: post.id, reason, details });
+    setReported(true);
+  }
+
+  // Closing the report dialog after a successful report takes the post out of the feed
+  // immediately (App Store Guideline 1.2: members must be able to remove objectionable content
+  // from their feed instantly, without waiting on a moderator).
+  function closeReport() {
+    setReportOpen(false);
+    if (reported) onDeleted?.(post.id);
+  }
+
+  // Block the poster: server-side blockUser hides all of their posts from this member's feed and
+  // stops messaging in both directions; we also drop this post locally so it disappears at once.
+  function confirmBlock() {
+    Alert.alert(
+      `Block ${post.ownerName ?? "this member"}?`,
+      "You won't see their posts, and you won't be able to message each other. You can unblock them any time from Me → Blocked accounts.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await blockUserFn({ targetUid: post.ownerId });
+              onDeleted?.(post.id);
+            } catch (err: any) {
+              Alert.alert("Couldn't block", err.message ?? "Please try again.");
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function handleToggleHallOfFame() {
@@ -125,6 +162,7 @@ export default function PostCard({
 
   async function openConversation() {
     if (!currentUserId || currentUserId === post.ownerId) return;
+    if (isGuest(user)) return promptCreateAccount("send messages");
     const conversationId = [currentUserId, post.ownerId].sort().join("_");
     const ref = doc(db, "conversations", conversationId);
     const snap = await getDoc(ref);
@@ -211,6 +249,11 @@ export default function PostCard({
                 <Text style={{ fontSize: 15 }}>🚩</Text>
               </TouchableOpacity>
             )}
+            {currentUserId && currentUserId !== post.ownerId && (
+              <TouchableOpacity onPress={confirmBlock} accessibilityLabel="Block user" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ fontSize: 15 }}>🚫</Text>
+              </TouchableOpacity>
+            )}
             {isAdmin && (post.type === "photo" || post.type === "video") && (
               <TouchableOpacity
                 onPress={handleToggleHallOfFame}
@@ -243,7 +286,7 @@ export default function PostCard({
           <ShareMenu postId={post.id} title={post.title} />
         </View>
       </View>
-      <ReportModal visible={reportOpen} onClose={() => setReportOpen(false)} onSubmit={handleReport} />
+      <ReportModal visible={reportOpen} onClose={closeReport} onSubmit={handleReport} />
     </View>
     </View>
   );

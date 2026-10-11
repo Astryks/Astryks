@@ -3,6 +3,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // True for the temporary, no-registration "guest" accounts every fresh mobile install signs
+    // into automatically (Firebase anonymous auth — see mobile/contexts/AuthContext.tsx). App Store
+    // Guideline 1.2 forbids anonymous user-generated content, so guests can browse but every rule
+    // that CREATES content (posts, comments, conversations, messages) requires !isGuest(). The
+    // client gates the same actions with a "create an account" prompt; this is the backstop that
+    // holds even for a modified client. Web accounts are always email/Google, never anonymous.
+    function isGuest() {
+      return request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
     // True if either user has blocked the other (blockUser/unblockUser in functions/index.js
     // keep blockedUserIds/blockedByUserIds in sync on both docs, so checking blockedUserIds
     // from both sides is enough — no need to also check blockedByUserIds here). get()/exists()
@@ -94,6 +104,7 @@ service cloud.firestore {
       // likeCount already set to whatever they want and instantly top the real-money Creative
       // Prize leaderboard with zero genuine likes.
       allow create: if request.auth != null
+        && !isGuest()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.type in ['photo', 'video', 'link', 'text']
         && (!('likeCount' in request.resource.data) || request.resource.data.likeCount == 0)
@@ -170,6 +181,7 @@ service cloud.firestore {
         // blocker's post (or vice versa). postIsVisible closes the same visibility gap described
         // on the likes rule above.
         allow create: if request.auth != null
+          && !isGuest()
           && postIsVisible(postId)
           && request.resource.data.userId == request.auth.uid
           && !isBlockedPair(request.auth.uid, get(/databases/$(database)/documents/posts/$(postId)).data.ownerId);
@@ -279,7 +291,11 @@ service cloud.firestore {
       // Blocking (either direction) stops a brand-new conversation from ever being created —
       // participants is always exactly [uidA, uidB].sort() (see app/messages/page.tsx), so
       // indexing both elements is safe.
-      allow create: if request.auth != null && request.auth.uid in request.resource.data.participants
+      // Guests can't start a conversation with another member (anonymous UGC, App Store 1.2) —
+      // the one exception is the Astryks Support thread, so a guest can still contact us.
+      allow create: if request.auth != null
+        && (!isGuest() || 'astryks-support' in request.resource.data.participants)
+        && request.auth.uid in request.resource.data.participants
         && !isBlockedPair(request.resource.data.participants[0], request.resource.data.participants[1]);
       // Pin the participant list — without this, any existing participant could silently add a
       // third party to a private DM thread (which can include real bank/PayID details shared
@@ -295,6 +311,7 @@ service cloud.firestore {
         // Also stops a NEW message in an ALREADY-existing conversation the moment either side
         // blocks the other — not just at conversation-creation time.
         allow create: if request.auth != null
+          && (!isGuest() || 'astryks-support' in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants)
           && !isBlockedPair(
                get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants[0],
                get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants[1]
