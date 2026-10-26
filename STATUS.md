@@ -1,5 +1,9 @@
 # Astryks — Status
 
+## Status review — 26 Oct 2026 (Sydney)
+- Git: branch `marketing-roadmap-ee`, tip `d93fb8b Add Ecommerce Equation classroom inventory and community sample`; working tree clean and pushed after this review.
+- Open: deeper community pass/comment threads/named workbook downloads; P0 page-change manifest for /learn-music or /learn-art; 'Pending (outside git)' list still open. Body last updated 6 Oct.
+
 _Last updated: 2026-10-06._
 
 **Live:** [astryks.com](https://astryks.com) — Firebase App Hosting `apphosting:astryks-web`, project `astryks-5f31c`
