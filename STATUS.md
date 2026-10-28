@@ -11,7 +11,7 @@ _Last updated: 2026-09-28._
 - **iOS 1.0 released** on the App Store (175 countries), 28 Oct 2026.
 - **New subjects without an app update.** The Learn picker (mobile and web) now shows Music and Art as before, plus every other doc in Firestore `subjects`, sorted by `order`. To add a subject, create a doc in the Firebase console (`subjects/<id>`) with `name`, `order`, and optionally `tagline`, `icon` (an emoji) and `thumbnailUrl`. Set `hidden: true` to keep it off the picker until its lessons are uploaded. The admin upload page (astryks.com/learn/upload) lists subjects from Firestore too.
 - **Videos** for any subject are uploaded at astryks.com/learn/upload (Bunny), with no app update.
-- **iOS 1.1.0** contains this change; it has to go through App Review once. After that, new subjects and lessons need no App Store update.
+- **iOS 1.1.0 (build 22)** contains this change. **Submitted to App Review 2026-10-28 2:28 PM AEDT**, What's New text set (en-AU). Once approved, press Release (or set automatic release); after that, new subjects and lessons need no App Store update.
 
 ## 2026-09-28 — removed "kids" framing, fixed per-page metadata
 
