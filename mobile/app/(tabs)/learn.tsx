@@ -45,6 +45,16 @@ const SUBJECT_CARDS: {
   { id: "art", name: "Art", tagline: "Create a self portrait", size: 160 },
 ];
 
+// Any other subject in Firestore `subjects` gets its own card automatically, so a new subject
+// needs no app update: give the doc `name`, `order`, and optionally `tagline`, `icon` (emoji)
+// and `thumbnailUrl`. Set `hidden: true` to keep it off the picker while lessons are uploaded.
+function subjectCards(subjects: any[]) {
+  const extra = subjects
+    .filter((s) => !s.hidden && !SUBJECT_CARDS.some((c) => c.id === s.id))
+    .map((s) => ({ id: s.id, name: s.name ?? s.id, tagline: s.tagline ?? "", size: 160 }));
+  return [...SUBJECT_CARDS, ...extra];
+}
+
 function tierFor(pct: number): { emoji: string; label: string } | null {
   if (pct >= 100) return { emoji: "🏆", label: "Mastered" };
   if (pct >= 50) return { emoji: "🥈", label: "Halfway there" };
@@ -603,7 +613,7 @@ export default function LearnScreen() {
         )
       ) : (
         <View style={{ alignItems: "center", gap: 28 }}>
-          {SUBJECT_CARDS.map((card) => {
+          {subjectCards(subjects).map((card: any) => {
             const subject = subjects.find((s) => s.id === card.id);
             if (card.comingSoon || !subject) {
               return (
@@ -615,7 +625,7 @@ export default function LearnScreen() {
                       alignItems: "center", justifyContent: "center",
                     }}
                   >
-                    <Text style={{ fontSize: 31 }}>{ICONS[card.id] ?? "⭐"}</Text>
+                    <Text style={{ fontSize: 31 }}>{ICONS[card.id] ?? subject?.icon ?? "⭐"}</Text>
                   </View>
                   <View style={{ alignItems: "center" }}>
                     <Text style={{ fontWeight: "700", fontSize: 17 }}>{card.name}</Text>
@@ -629,11 +639,11 @@ export default function LearnScreen() {
             return (
               <TouchableOpacity key={card.id} onPress={() => openSubject(subject)} style={{ alignItems: "center", gap: 10 }}>
                 <View style={{ width: card.size, height: card.size, borderRadius: card.size / 2, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 6, elevation: 3, backgroundColor: colors.accent, borderWidth: 3, borderColor: subjectColor }}>
-                  {THUMBNAILS[card.id] ? (
-                    <Image source={THUMBNAILS[card.id]} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                  {THUMBNAILS[card.id] || subject.thumbnailUrl ? (
+                    <Image source={THUMBNAILS[card.id] ?? { uri: subject.thumbnailUrl }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
                   ) : (
                     <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                      <Text style={{ fontSize: card.size * 0.32 }}>{ICONS[card.id] ?? "⭐"}</Text>
+                      <Text style={{ fontSize: card.size * 0.32 }}>{ICONS[card.id] ?? subject.icon ?? "⭐"}</Text>
                     </View>
                   )}
                   {subjectTier[card.id] && (

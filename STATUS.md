@@ -5,6 +5,14 @@ _Last updated: 2026-09-28._
 **Live:** [astryks.com](https://astryks.com) — Firebase App Hosting `apphosting:astryks-web`, project `astryks-5f31c`
 **Repo:** [Astryks/Astryks](https://github.com/Astryks/Astryks) · default branch `main`
 
+
+## 2026-10-28: iOS 1.0 released; subjects now come from Firestore
+
+- **iOS 1.0 released** on the App Store (175 countries), 28 Oct 2026.
+- **New subjects without an app update.** The Learn picker (mobile and web) now shows Music and Art as before, plus every other doc in Firestore `subjects`, sorted by `order`. To add a subject, create a doc in the Firebase console (`subjects/<id>`) with `name`, `order`, and optionally `tagline`, `icon` (an emoji) and `thumbnailUrl`. Set `hidden: true` to keep it off the picker until its lessons are uploaded. The admin upload page (astryks.com/learn/upload) lists subjects from Firestore too.
+- **Videos** for any subject are uploaded at astryks.com/learn/upload (Bunny), with no app update.
+- **iOS 1.1.0** contains this change; it has to go through App Review once. After that, new subjects and lessons need no App Store update.
+
 ## 2026-09-28 — removed "kids" framing, fixed per-page metadata
 
 A prior push (2026-09-23, PRs #2–#11) added genuinely useful SEO infrastructure — Google/Bing

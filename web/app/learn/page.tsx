@@ -42,8 +42,16 @@ const SUBJECT_CARDS: {
 }[] = [
   { id: "music", name: "Music", tagline: "Create a song from scratch", thumbnail: "/music-preview.jpg", size: 208 },
   { id: "art", name: "Art", tagline: "Create a self portrait", thumbnail: "/art-preview.jpg", size: 208 },
-  // Investing (share market) is next up — add its card here once the first lessons are uploaded.
 ];
+
+// Any other subject in Firestore `subjects` gets its own card automatically (same rule as the
+// mobile app): `name`, `order`, optional `tagline`, `icon` (emoji), `thumbnailUrl`, `hidden`.
+function subjectCards(subjects: any[]) {
+  const extra = subjects
+    .filter((s) => !s.hidden && !SUBJECT_CARDS.some((c) => c.id === s.id))
+    .map((s) => ({ id: s.id, name: s.name ?? s.id, tagline: s.tagline ?? "", thumbnail: s.thumbnailUrl, size: 208 }));
+  return [...SUBJECT_CARDS, ...extra];
+}
 
 function tierFor(pct: number): { emoji: string; label: string } | null {
   if (pct >= 100) return { emoji: "🏆", label: "Mastered" };
@@ -507,7 +515,7 @@ function LearnPageContent() {
         <SubjectsSkeleton />
       ) : (
       <div className="flex flex-col items-center gap-8">
-        {SUBJECT_CARDS.map((card) => {
+        {subjectCards(subjects).map((card: any) => {
           const subject = subjects.find((s) => s.id === card.id);
           if (card.comingSoon || !subject) {
             return (
@@ -529,8 +537,12 @@ function LearnPageContent() {
           return (
             <button key={card.id} onClick={() => openSubject(subject)} className="flex flex-col items-center gap-3">
               <div className="rounded-full overflow-hidden relative shadow-md" style={{ width: card.size, height: card.size }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={card.thumbnail} alt="" className="w-full h-full object-cover" />
+                {card.thumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={card.thumbnail} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="w-full h-full bg-ink/5 flex items-center justify-center text-6xl">{SUBJECT_ICONS[card.id] ?? subject.icon ?? "⭐"}</span>
+                )}
                 {subjectTier[card.id] && (
                   <span
                     className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-white flex items-center justify-center text-sm shadow"

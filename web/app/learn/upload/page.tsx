@@ -27,10 +27,17 @@ export default function LessonUploadPage() {
   const [loading, setLoading] = useState(false);
   const [existingLessons, setExistingLessons] = useState<any[] | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [subjectOptions, setSubjectOptions] = useState<{ id: string; name: string }[]>([
+    { id: "music", name: "Music" },
+    { id: "art", name: "Art" },
+  ]);
 
   const isAdminUser = !authLoading && isAdmin(user?.email);
 
   async function loadExisting() {
+    // Subjects added in the Firebase console show up here straight away.
+    const subjSnap = await getDocs(query(collection(db, "subjects"), orderBy("order", "asc")));
+    if (!subjSnap.empty) setSubjectOptions(subjSnap.docs.map((d) => ({ id: d.id, name: d.data().name ?? d.id })));
     const snap = await getDocs(query(collection(db, "lessons"), orderBy("createdAt", "desc")));
     setExistingLessons(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }
@@ -148,8 +155,9 @@ export default function LessonUploadPage() {
       <h1 className="font-display text-2xl font-semibold mb-6">Add a lesson</h1>
       <form onSubmit={handleUpload} className="space-y-4">
         <select className="input" value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
-          <option value="music">Music</option>
-          <option value="art">Art</option>
+          {subjectOptions.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
         </select>
         <input className="input" placeholder="Lesson title" value={title} onChange={(e) => setTitle(e.target.value)} required />
         <input
